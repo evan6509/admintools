@@ -2,15 +2,8 @@ group = "com.echubbuck"
 version = "1.0.0"
 
 subprojects {
-    apply plugin: "java"
-
     group = rootProject.group
     version = rootProject.version
-
-    java {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-    }
 
     repositories {
         mavenCentral()

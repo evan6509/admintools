@@ -6,6 +6,16 @@ base {
     archivesName = "admintools-1.21.11"
 }
 
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        admintools {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
 repositories {
     maven { url "https://maven.fabricmc.net/" }
     mavenCentral()
@@ -17,4 +27,20 @@ dependencies {
     mappings(loom.officialMojangMappings())
     modImplementation("net.fabricmc:fabric-loader:${loader_version_1_21_11}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version_1_21_11}")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
 }

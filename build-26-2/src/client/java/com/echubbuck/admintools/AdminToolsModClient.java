@@ -5,12 +5,12 @@ import com.echubbuck.admintools.gui.EnderSeeScreenHandler;
 import com.echubbuck.admintools.gui.InvSeeScreen;
 import com.echubbuck.admintools.gui.InvSeeScreenHandler;
 import net.fabricmc.api.ClientModInitializer;
-import net.minecraft.client.gui.screen.ingame.HandledScreens;
+import net.minecraft.client.gui.screens.MenuScreens;
 
 public class AdminToolsModClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        HandledScreens.register(InvSeeScreenHandler.TYPE, InvSeeScreen::new);
-        HandledScreens.register(EnderSeeScreenHandler.TYPE, EnderSeeScreen::new);
+        MenuScreens.register(InvSeeScreenHandler.TYPE, InvSeeScreen::new);
+        MenuScreens.register(EnderSeeScreenHandler.TYPE, EnderSeeScreen::new);
     }
 }

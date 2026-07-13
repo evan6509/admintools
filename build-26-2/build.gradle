@@ -1,0 +1,66 @@
+plugins {
+    id("net.fabricmc.fabric-loom") version "1.17.14"
+    id("maven-publish")
+}
+
+version = "1.0.0"
+group = "com.echubbuck"
+
+base {
+    archivesName = "admintools-26.2"
+}
+
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        admintools {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft("com.mojang:minecraft:26.2")
+    implementation("net.fabricmc:fabric-loader:0.19.3")
+    implementation("net.fabricmc.fabric-api:fabric-api:0.154.2+26.2")
+    implementation("com.google.code.gson:gson:2.10.1")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+task debugClasspath {
+    doLast {
+        println "=== CompileJava classpath ==="
+        tasks.compileJava.classpath.files.each { f -> println "  ${f.name}" }
+        println "=== All minecraft configurations ==="
+        configurations.findAll { it.name.contains("minecraft") }.each { c ->
+            println "  ${c.name}: resolvable=${c.canBeResolved}"
+            if (c.canBeResolved) {
+                try {
+                    c.files.each { f -> println "    -> ${f.name}" }
+                } catch (Exception e) {
+                    println "    [ERROR: ${e.message}]"
+                }
+            }
+        }
+    }
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
