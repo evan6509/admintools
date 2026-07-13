@@ -1,0 +1,13 @@
+pluginManagement {
+    repositories {
+        maven { url "https://maven.fabricmc.net/" }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = "admintools"
+
+include("common")
+include("version-1-21-11")
+include("version-26-2")

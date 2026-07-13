@@ -1,0 +1,19 @@
+plugins {
+    id("net.fabricmc.fabric-loom") version "${loom_version_26_2}"
+}
+
+base {
+    archivesName = "admintools-26.2"
+}
+
+repositories {
+    maven { url "https://maven.fabricmc.net/" }
+    mavenCentral()
+}
+
+dependencies {
+    implementation(project(":common"))
+    minecraft("com.mojang:minecraft:${minecraft_version_26_2}")
+    implementation("net.fabricmc:fabric-loader:${loader_version_26_2}")
+    implementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version_26_2}")
+}
