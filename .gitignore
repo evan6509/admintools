@@ -7,3 +7,4 @@ run/
 *.zip
 .DS_Store
 *.note
+test-server/
