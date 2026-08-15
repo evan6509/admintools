@@ -8,16 +8,7 @@ import com.echubbuck.admintools.heuristic.HeuristicTracker;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.world.flag.FeatureFlagSet;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
 
 public class AdminToolsMod implements ModInitializer {
     public static final String MOD_ID = "admintools";
@@ -36,14 +27,8 @@ public class AdminToolsMod implements ModInitializer {
         heuristicEngine = new HeuristicEngine();
         heuristicTracker = new HeuristicTracker(heuristicEngine);
 
-        registerScreenHandlers();
         registerCommands();
         registerEvents();
-    }
-
-    private void registerScreenHandlers() {
-        Registry.register(BuiltInRegistries.MENU, Identifier.parse(MOD_ID + ":invsee"), InvSeeScreenHandler.TYPE);
-        Registry.register(BuiltInRegistries.MENU, Identifier.parse(MOD_ID + ":endersee"), EnderSeeScreenHandler.TYPE);
     }
 
     private void registerCommands() {

@@ -7,11 +7,9 @@ base {
 }
 
 loom {
-    splitEnvironmentSourceSets()
     mods {
         admintools {
             sourceSet sourceSets.main
-            sourceSet sourceSets.client
         }
     }
 }

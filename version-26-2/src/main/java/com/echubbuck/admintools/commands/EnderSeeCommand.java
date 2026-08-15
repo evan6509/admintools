@@ -9,6 +9,7 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.world.SimpleMenuProvider;
 
 public class EnderSeeCommand {
 
@@ -31,7 +32,9 @@ public class EnderSeeCommand {
             return 0;
         }
 
-        admin.openMenu(new EnderSeeScreenHandler.Provider(target));
+        admin.openMenu(new SimpleMenuProvider(
+                (syncId, inv, player) -> new EnderSeeScreenHandler(syncId, inv, target),
+                Component.literal("Ender Chest: " + target.getScoreboardName())));
         AdminToolsMod.getActionLogger().log(source.getTextName(), "ENDERSEE", target.getScoreboardName(), "opened");
         return 1;
     }

@@ -10,8 +10,7 @@
     "icon": "assets/admintools/icon.png",
     "environment": "*",
     "entrypoints": {
-        "main": ["com.echubbuck.admintools.AdminToolsMod"],
-        "client": ["com.echubbuck.admintools.AdminToolsModClient"]
+        "main": ["com.echubbuck.admintools.AdminToolsMod"]
     },
     "mixins": [],
     "depends": {

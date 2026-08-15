@@ -9,6 +9,7 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.world.SimpleMenuProvider;
 
 public class InvSeeCommand {
 
@@ -16,13 +17,20 @@ public class InvSeeCommand {
         dispatcher.register(Commands.literal("invsee")
                 .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(ctx -> execute(ctx.getSource(), EntityArgument.getPlayer(ctx, "player")))));
+                        .executes(ctx -> execute(ctx.getSource(), EntityArgument.getPlayer(ctx, "player"), false))
+                        .then(Commands.literal("edit")
+                                .executes(ctx -> execute(ctx.getSource(), EntityArgument.getPlayer(ctx, "player"), true)))));
     }
 
-    private static int execute(CommandSourceStack source, ServerPlayer target) {
+    private static int execute(CommandSourceStack source, ServerPlayer target, boolean editable) {
         ServerPlayer admin = source.getPlayer();
         if (admin == null) {
             source.sendFailure(Component.literal("This command must be run by a player."));
+            return 0;
+        }
+
+        if (admin == target) {
+            source.sendFailure(Component.literal("You cannot invsee yourself."));
             return 0;
         }
 
@@ -31,8 +39,11 @@ public class InvSeeCommand {
             return 0;
         }
 
-        admin.openMenu(new InvSeeScreenHandler.Provider(target));
-        AdminToolsMod.getActionLogger().log(source.getTextName(), "INVSEE", target.getScoreboardName(), "opened");
+        String suffix = editable ? " (editing)" : "";
+        admin.openMenu(new SimpleMenuProvider(
+                (syncId, inv, player) -> new InvSeeScreenHandler(syncId, inv, target, editable),
+                Component.literal("Inventory: " + target.getScoreboardName() + suffix)));
+        AdminToolsMod.getActionLogger().log(source.getTextName(), editable ? "INVSEE_EDIT" : "INVSEE", target.getScoreboardName(), "opened");
         return 1;
     }
 }
