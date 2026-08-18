@@ -20,6 +20,27 @@ There is also a standalone build at `build-26-2/` (self-contained, no multi-proj
 | Ender chest viewer | `/endersee <player>` | 27-slot single-chest GUI, read-only |
 | X-ray heuristic audit | `/xrayaudit <player>` | Dimension-specific rules; tracks mining speed, torch ratio, ore exposure, chunk updates |
 | Role/Permission management | `/adminrole grant\|remove\|assign` | JSON config (`config/admintools/roles.json`), hot-reloadable |
+| Item identity & anti-dupe | `/itemtrace <uuid>` | Per-stack persistent identity (`admintools:uid` data component), lineage, movement log, duplicate detection |
+| Admin item give/remove | `/adminitem give\|remove` | Grants items with `ADMIN_GIVE` identity / removes items with `ADMIN_REMOVE` |
+
+### Item identity system (26.2 only)
+
+- Every stack gets a persistent `admintools:uid` data component on first observation
+  (not re-generated on copy; survives moves/restarts; hidden from clients).
+- `ItemStackMatchingMixin` exempts the uid from `isSameItemSameComponents` so vanilla
+  stacking/splitting/merging is unaffected.
+- Split stacks (same uid twice in one inventory) are re-identified same-tick with
+  `SPLIT` lineage; merges record `MERGE` (absorbed parent); player↔player moves are
+  correlated as `TRANSFER`.
+- Persistence: `config/admintools/item_ledger.json` (snapshot) +
+  `logs/admintools/item_ledger.jsonl` (events) + `item_duplicates.jsonl`.
+- `ItemDuplicateDetector` flags the same uid in ≥2 independent locations (player
+  inventories/ender chests) — alert-only, no auto-removal; creative excluded by
+  `detect_creative_duplicates` config.
+- Mixins (26.2): `ItemStackMatchingMixin`, `PlayerItemMixin` (pickup/drop),
+  `ItemEntityMixin` (spawn), `BlockItemPlaceMixin` (place).
+- Tests: `:version-26-2:runUnitTests` (dependency-free logic tests) and `@GameTest`
+  methods in `com.echubbuck.admintools.test` via `:version-26-2:runGametest`.
 
 ## Architecture
 
@@ -82,4 +103,4 @@ Commit after each logical unit. Use `./gradlew :<module>:build -x test` to verif
 
 - `common/`: Gson 2.10.1 (JSON serialization)
 - Both version modules: Fabric Loader, Fabric API (version-specific)
-- No mixins, no third-party mod dependencies
+- 26.2 uses 4 mixins (item identity system); no third-party mod dependencies

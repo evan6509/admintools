@@ -1,0 +1,15 @@
+{
+    "required": true,
+    "minVersion": "0.8",
+    "package": "com.echubbuck.admintools.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "ItemStackMatchingMixin",
+        "PlayerItemMixin",
+        "ItemEntityMixin",
+        "BlockItemPlaceMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

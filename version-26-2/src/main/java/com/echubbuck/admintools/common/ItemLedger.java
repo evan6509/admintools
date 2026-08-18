@@ -1,0 +1,209 @@
+package com.echubbuck.admintools.common;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+
+import java.io.IOException;
+import java.lang.reflect.Type;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class ItemLedger {
+    private static final Path CONFIG_PATH = Path.of("config", "admintools", "item_ledger.json");
+    private static final Path EVENT_LOG = Path.of("logs", "admintools", "item_ledger.jsonl");
+    private static final Path DUPLICATE_LOG = Path.of("logs", "admintools", "item_duplicates.jsonl");
+
+    private static final int MAX_EVENTS = 2000;
+
+    private final Path configPath;
+    private final Path eventLog;
+    private final Path duplicateLog;
+    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private final Map<String, ItemLedgerEntry> entries = new ConcurrentHashMap<>();
+    private final Deque<ItemMovementEvent> recentEvents = new ArrayDeque<>();
+    private final List<ItemMovementEvent> duplicateAlerts = new ArrayList<>();
+    private volatile boolean dirty = false;
+
+    public ItemLedger() {
+        this(CONFIG_PATH, EVENT_LOG, DUPLICATE_LOG);
+    }
+
+    /** Test hook: redirect persistence to custom paths. */
+    public ItemLedger(Path configPath, Path eventLog, Path duplicateLog) {
+        this.configPath = configPath;
+        this.eventLog = eventLog;
+        this.duplicateLog = duplicateLog;
+        try {
+            Files.createDirectories(this.eventLog.getParent());
+            Files.createDirectories(this.duplicateLog.getParent());
+        } catch (IOException e) {
+            System.err.println("[AdminTools] Failed to create ledger dirs: " + e.getMessage());
+        }
+        load();
+    }
+
+    // --- Identity registration ---
+
+    public void registerIdentity(ItemIdentity identity, String itemId, int count, String owner, String location) {
+        entries.put(identity.uidString(), new ItemLedgerEntry(identity, itemId, count, owner, location));
+        dirty = true;
+    }
+
+    public ItemLedgerEntry entry(String uid) {
+        return entries.get(uid);
+    }
+
+    public boolean has(String uid) {
+        return entries.containsKey(uid);
+    }
+
+    public void updateCount(String uid, int count) {
+        ItemLedgerEntry e = entries.get(uid);
+        if (e != null) {
+            e.count = count;
+            e.lastSeen = System.currentTimeMillis();
+            dirty = true;
+        }
+    }
+
+    public void setOwnerLocation(String uid, String owner, String location) {
+        ItemLedgerEntry e = entries.get(uid);
+        if (e != null) {
+            e.currentOwner = owner;
+            e.currentLocation = location;
+            e.lastSeen = System.currentTimeMillis();
+            dirty = true;
+        }
+    }
+
+    public void setStatus(String uid, String status) {
+        ItemLedgerEntry e = entries.get(uid);
+        if (e != null) {
+            e.status = status;
+            e.lastSeen = System.currentTimeMillis();
+            dirty = true;
+        }
+    }
+
+    public void addParent(String uid, String parentUid) {
+        ItemLedgerEntry e = entries.get(uid);
+        if (e != null && !e.parents.contains(parentUid)) {
+            e.parents.add(parentUid);
+            dirty = true;
+        }
+    }
+
+    // --- Events ---
+
+    public void recordEvent(ItemMovementEvent evt) {
+        synchronized (recentEvents) {
+            recentEvents.addLast(evt);
+            if (recentEvents.size() > MAX_EVENTS) recentEvents.removeFirst();
+        }
+        appendJsonLine(eventLog, evt);
+    }
+
+    public void recordDuplicate(ItemMovementEvent evt) {
+        synchronized (duplicateAlerts) {
+            duplicateAlerts.add(evt);
+            if (duplicateAlerts.size() > 500) duplicateAlerts.remove(0);
+        }
+        appendJsonLine(duplicateLog, evt);
+    }
+
+    // --- Queries ---
+
+    public List<ItemLedgerEntry> allEntries() {
+        return new ArrayList<>(entries.values());
+    }
+
+    public List<ItemMovementEvent> recent(int n) {
+        synchronized (recentEvents) {
+            int size = recentEvents.size();
+            List<ItemMovementEvent> out = new ArrayList<>(Math.min(n, size));
+            var it = recentEvents.descendingIterator();
+            for (int i = 0; i < n && it.hasNext(); i++) out.add(it.next());
+            return out;
+        }
+    }
+
+    public List<ItemMovementEvent> eventsByOwner(String owner) {
+        return filterEvents(e -> e.to() != null && e.to().equals(owner) || owner.equals(e.from()));
+    }
+
+    public List<ItemMovementEvent> eventsByItem(String itemId) {
+        return filterEvents(e -> itemId.equals(e.itemId()));
+    }
+
+    public List<ItemMovementEvent> eventsByUid(String uid) {
+        return filterEvents(e -> uid.equals(e.uid()));
+    }
+
+    public List<ItemMovementEvent> duplicateAlerts() {
+        synchronized (duplicateAlerts) {
+            return new ArrayList<>(duplicateAlerts);
+        }
+    }
+
+    private List<ItemMovementEvent> filterEvents(java.util.function.Predicate<ItemMovementEvent> pred) {
+        synchronized (recentEvents) {
+            List<ItemMovementEvent> out = new ArrayList<>();
+            for (ItemMovementEvent e : recentEvents) {
+                if (pred.test(e)) out.add(e);
+            }
+            return out;
+        }
+    }
+
+    // --- Persistence ---
+
+    public void saveIfDirty() {
+        if (dirty) save();
+    }
+
+    public void save() {
+        dirty = false;
+        try {
+            Files.createDirectories(configPath.getParent());
+            Files.writeString(configPath, gson.toJson(entries));
+        } catch (IOException e) {
+            System.err.println("[AdminTools] Failed to save item ledger: " + e.getMessage());
+            dirty = true;
+        }
+    }
+
+    private void load() {
+        try {
+            if (Files.exists(configPath)) {
+                String json = Files.readString(configPath);
+                Type type = new TypeToken<Map<String, ItemLedgerEntry>>() {}.getType();
+                Map<String, ItemLedgerEntry> loaded = gson.fromJson(json, type);
+                if (loaded != null) {
+                    entries.clear();
+                    entries.putAll(loaded);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[AdminTools] Failed to load item ledger: " + e.getMessage());
+        }
+    }
+
+    private void appendJsonLine(Path path, Object obj) {
+        try {
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, gson.toJson(obj) + System.lineSeparator(),
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            System.err.println("[AdminTools] Ledger write failed: " + e.getMessage());
+        }
+    }
+}

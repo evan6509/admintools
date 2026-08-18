@@ -12,6 +12,11 @@ loom {
             sourceSet sourceSets.main
         }
     }
+    runs {
+        gametest {
+            // Runs the @GameTest methods in com.echubbuck.admintools.test.
+        }
+    }
 }
 
 repositories {
@@ -28,6 +33,17 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     it.options.release = 25
+}
+
+test {
+    failOnNoDiscoveredTests = false
+}
+
+tasks.register("runUnitTests", JavaExec) {
+    group = "verification"
+    description = "Runs the dependency-free unit tests (ItemLogicTestRunner)."
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "com.echubbuck.admintools.common.ItemLogicTestRunner"
 }
 
 java {

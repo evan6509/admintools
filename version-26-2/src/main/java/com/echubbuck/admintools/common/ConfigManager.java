@@ -62,6 +62,7 @@ public class ConfigManager {
         obj.addProperty("max_command_rate", 10);
         obj.addProperty("log_actions_to_file", true);
         obj.addProperty("invsee_edit_mode", false);
+        obj.addProperty("detect_creative_duplicates", false);
         return obj;
     }
 }
