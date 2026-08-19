@@ -7,31 +7,43 @@ multi-project Gradle build:
 
 | Module | Target | Build command |
 |---|---|---|
-| `version-1-21-11` | MC 1.21.11 (obfuscated + MojangMaps) | `./gradlew :version-1-21-11:build` |
-| `version-26-2` | MC 26.2 (non-obfuscated, Mojang names) | `./gradlew :version-26-2:build` |
+| `version-1-21-11` | MC 1.21.11, Java 21 | `./gradlew :version-1-21-11:build` |
+| `version-26-2` | MC 26.2, Java 25 | `./gradlew :version-26-2:build` |
 
-There is also a standalone build at `build-26-2/` (self-contained, no multi-project).
+- `build-26-2/` is a **stale standalone snapshot** (git-tracked, predates the item
+  identity feature — no `ItemTraceCommand`, no mixins). Do not edit it;
+  `version-26-2/` is canonical.
+- Both modules use **Mojang official mapping names** (not Yarn): `Component` not
+  `Text`, `AbstractContainerMenu` not `Menu`, `Identifier` not `ResourceLocation`.
+- Default JDK on this machine is 25; the 1.21.11 module cross-compiles via
+  `--release 21`.
 
 ## Features
 
 | Feature | Command | Notes |
 |---|---|---|
-| Player inventory viewer | `/invsee <player>` | 54-slot double-chest GUI, read-only |
+| Player inventory viewer | `/invsee <player> [edit]` | 36-slot vanilla chest GUI backed by the target's real `Inventory`; `edit` makes it writable |
 | Ender chest viewer | `/endersee <player>` | 27-slot single-chest GUI, read-only |
 | X-ray heuristic audit | `/xrayaudit <player>` | Dimension-specific rules; tracks mining speed, torch ratio, ore exposure, chunk updates |
 | Role/Permission management | `/adminrole grant\|remove\|assign` | JSON config (`config/admintools/roles.json`), hot-reloadable |
-| Item identity & anti-dupe | `/itemtrace <uuid>` | Per-stack persistent identity (`admintools:uid` data component), lineage, movement log, duplicate detection |
-| Admin item give/remove | `/adminitem give\|remove` | Grants items with `ADMIN_GIVE` identity / removes items with `ADMIN_REMOVE` |
+| Item identity & anti-dupe (26.2) | `/itemtrace <uuid>` | Per-stack persistent identity (`admintools:uid` data component), lineage, movement log, duplicate detection |
+| Admin item give/remove (26.2) | `/adminitem give\|remove` | Grants items with `ADMIN_GIVE` identity / removes items with `ADMIN_REMOVE` |
+
+Gating: viewer/audit/trace/item commands require OP4
+(`Permissions.COMMANDS_GAMEMASTER`); `/adminrole` requires OP2
+(`Permissions.COMMANDS_ADMIN`). Viewers are additionally toggleable via config
+(`enable_inventory_viewer`, etc.).
 
 ### Item identity system (26.2 only)
 
-- Every stack gets a persistent `admintools:uid` data component on first observation
-  (not re-generated on copy; survives moves/restarts; hidden from clients).
-- `ItemStackMatchingMixin` exempts the uid from `isSameItemSameComponents` so vanilla
-  stacking/splitting/merging is unaffected.
+- Every stack gets a persistent `admintools:uid` data component on first
+  observation (not re-generated on copy; survives moves/restarts). The component
+  has only a `persistent` codec (no network codec), so it never syncs to clients.
+- `ItemStackMatchingMixin` exempts the uid from `isSameItemSameComponents` so
+  vanilla stacking/splitting/merging is unaffected.
 - Split stacks (same uid twice in one inventory) are re-identified same-tick with
-  `SPLIT` lineage; merges record `MERGE` (absorbed parent); player↔player moves are
-  correlated as `TRANSFER`.
+  `SPLIT` lineage; merges record `MERGE` (absorbed parent); player↔player moves
+  are correlated as `TRANSFER`.
 - Persistence: `config/admintools/item_ledger.json` (snapshot) +
   `logs/admintools/item_ledger.jsonl` (events) + `item_duplicates.jsonl`.
 - `ItemDuplicateDetector` flags the same uid in ≥2 independent locations (player
@@ -39,68 +51,73 @@ There is also a standalone build at `build-26-2/` (self-contained, no multi-proj
   `detect_creative_duplicates` config.
 - Mixins (26.2): `ItemStackMatchingMixin`, `PlayerItemMixin` (pickup/drop),
   `ItemEntityMixin` (spawn), `BlockItemPlaceMixin` (place).
-- Tests: `:version-26-2:runUnitTests` (dependency-free logic tests) and `@GameTest`
-  methods in `com.echubbuck.admintools.test` via `:version-26-2:runGametest`.
+  `admintools.mixins.json` is `required: true` — a missed injection crashes the
+  game, it does not just log.
 
-## Architecture
+## Architecture — read before editing
 
-- **Common module** (`:common`): MC-agnostic POJOs — roles, permissions, config,
-  action logger, heuristic engine data models. No Minecraft imports.
-- **Per-version modules**: Minecraft-dependent code — commands, screen handlers,
-  screens, event hooks, client init.
-- All GUIs use `splitEnvironmentSourceSets()` — `src/main/java` for shared/server,
-  `src/client/java` for client-only (screens).
+- **Common classes are vendored per module.** Each version module has its own copy
+  of `com.echubbuck.admintools.common.*` under its own `src/main/java`.
+  `version-26-2` does **not** depend on `:common` at all, and its copy has
+  diverged (26.2-only `Item*` classes + `detect_creative_duplicates`).
+  `version-1-21-11` declares `:common` but its identical local copy shadows it,
+  and built jars are self-contained. **Fixing a common class means editing the
+  copy in each target module** — editing `common/` alone changes nothing.
+- **No client source set, no client entrypoint.** There is no `src/client/java`
+  and no `client` entrypoint in `fabric.mod.json` (`environment: "*"`). The
+  viewer GUIs are vanilla `ChestMenu` subclasses (`InvSeeScreenHandler`,
+  `EnderSeeScreenHandler`) opened via `SimpleMenuProvider` and rendered by the
+  vanilla client screen — there are no custom `Screen` classes.
+- Per-version modules hold: commands, screen handlers, event hooks, and the
+  `AdminToolsMod` initializer (static singletons exposed via getters).
 - Permission gate via custom `PermissionManager` layered on vanilla OP levels.
 
 ## Key build details
 
-- **Gradle**: 9.5.1 (wrapper generated)
-- **Loom**: 1.17.14 for both versions
-- **For 1.21.11**: uses `fabric-loom` (legacy obfuscated) with `loom.officialMojangMappings()`
-- **For 26.2**: uses `net.fabricmc.fabric-loom` (non-obfuscated); code uses Mojang
-  official mapping names directly
-- **Java**: 1.21.11 → Java 21, 26.2 → Java 25
+- Gradle 9.5.1 (wrapper); Loom 1.17.14 for both modules.
+- 1.21.11 uses the legacy `fabric-loom` plugin + `loom.officialMojangMappings()`;
+  26.2 uses `net.fabricmc.fabric-loom` (non-obfuscated pipeline).
+- Java: 1.21.11 → `--release 21`, 26.2 → `--release 25`.
+- Dependencies: Gson 2.10.1, Fabric Loader + Fabric API (version-specific). No
+  third-party mod dependencies.
 
-## Critical API differences between versions
-
-The code for both versions uses **Mojang official mapping names**. Key classes:
-
-| Concept | Mojang class | Package |
-|---|---|---|
-| Text/Component | `Component` | `net.minecraft.network.chat` |
-| ScreenHandler | `AbstractContainerMenu` | `net.minecraft.world.inventory` |
-| MenuType | `MenuType` | `net.minecraft.world.inventory` |
-| Identifier | `Identifier` | `net.minecraft.resources` |
-| Player | `Player` | `net.minecraft.world.entity.player` |
-| Inventory | `Inventory` | `net.minecraft.world.entity.player` |
-| ServerPlayer | `ServerPlayer` | `net.minecraft.server.level` |
-| Commands | `Commands` | `net.minecraft.commands` |
-| CommandSourceStack | `CommandSourceStack` | `net.minecraft.commands` |
-| EntityArgument | `EntityArgument` | `net.minecraft.commands.arguments` |
-| PermissionSet | `PermissionSet` | `net.minecraft.server.permissions` |
-| BuiltInRegistries | `BuiltInRegistries` | `net.minecraft.core.registries` |
-| Container/SimpleContainer | `Container`/`SimpleContainer` | `net.minecraft.world` |
-
-### Differences between 1.21.11 and 26.2
+### API differences between 1.21.11 and 26.2 (verified against both jars)
 
 | Area | 1.21.11 | 26.2 |
 |---|---|---|
 | Render class | `GuiGraphics` | `GuiGraphicsExtractor` |
-| GuiGraphics.blit pipeline | `RenderPipelines.GUI` | `RenderPipelines.GUI_TEXTURED` |
-| Screen render method | `renderBg(GuiGraphics, float, int, int)` | `extractBackground(GuiGraphicsExtractor, int, int, float)` |
-| Screen labels method | `renderLabels(GuiGraphics, int, int)` | `extractLabels(GuiGraphicsExtractor, int, int)` |
-| AbstractContainerMenu.quickMove | `quickMoveStack(Player, int)` | `quickMoveStack(Player, int)` |
-| ServerTickEvents constant | `START_WORLD_TICK` | `START_LEVEL_TICK` |
-| ServerTickEvents interface | `StartWorldTick` | `StartLevelTick` |
+| `Screen` background hook | `renderBackground(GuiGraphics, int, int, float)` | `extractBackground(GuiGraphicsExtractor, int, int, float)` |
+| `Screen` main render | `render(GuiGraphics, int, int, float)` | `extractRenderState(GuiGraphicsExtractor, int, int, float)` |
+| Textured blit pipeline | `RenderPipelines.GUI` | `RenderPipelines.GUI_TEXTURED` (both in `net.minecraft.client.renderer`) |
+| `ServerTickEvents` | `START_WORLD_TICK` / `StartWorldTick` | `START_LEVEL_TICK` / `StartLevelTick` |
 | Loader requirement | `>=0.16.8` | `>=0.19.3` |
-| Java target | 21 | 25 |
+
+## Tests
+
+- `./gradlew :version-26-2:runUnitTests` — dependency-free logic tests. This is a
+  plain `main`-class runner (`ItemLogicTestRunner`), **not JUnit**.
+- `./gradlew :version-26-2:runGametest` — `@GameTest` methods, which live in
+  `src/main/java/com/echubbuck/admintools/test/` (not `src/test`).
+- 1.21.11 has no tests.
+
+## Manual testing (26.2)
+
+```bash
+./test-server/run-26-2.sh            # = ./gradlew :version-26-2:runServer (foreground, Ctrl+C)
+./test-server/run-26-2.sh --offline  # if Gradle can't reach the network
+```
+
+- Listens on `localhost:25565`; server data (world/logs/config) goes to
+  `version-26-2/run/` (gitignored). `test-server/` is itself gitignored — a
+  local-only helper.
+- The server runs commands + heuristics regardless; the **viewer GUIs** are
+  client-rendered, so the client needs
+  `version-26-2/build/libs/admintools-26.2-1.0.0.jar` plus the Fabric API jar in
+  its `mods/` folder.
+- Make yourself OP in the server console (`op <name>`): OP4 for viewers/audit,
+  OP2 for `/adminrole`.
 
 ## Git workflow
 
-Commit after each logical unit. Use `./gradlew :<module>:build -x test` to verify.
-
-## Dependencies
-
-- `common/`: Gson 2.10.1 (JSON serialization)
-- Both version modules: Fabric Loader, Fabric API (version-specific)
-- 26.2 uses 4 mixins (item identity system); no third-party mod dependencies
+Conventional-commit style (`feat:`, `refactor:`, `chore:`). Commit after each
+logical unit. Verify with `./gradlew :<module>:build`.
