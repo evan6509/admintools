@@ -63,6 +63,7 @@ public class ConfigManager {
         obj.addProperty("log_actions_to_file", true);
         obj.addProperty("invsee_edit_mode", false);
         obj.addProperty("detect_creative_duplicates", false);
+        obj.addProperty("ledger_max_entries", 5000);
         return obj;
     }
 }

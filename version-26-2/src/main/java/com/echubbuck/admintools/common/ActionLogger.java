@@ -12,6 +12,8 @@ public class ActionLogger {
     private static final Path LOG_DIR = Path.of("logs", "admintools");
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    /** Compact Gson for line-oriented JSON; pretty output would break line parsing. */
+    private final Gson jsonGson = new Gson();
 
     public ActionLogger() {
         try {
@@ -35,7 +37,7 @@ public class ActionLogger {
         obj.put("action", action);
         obj.put("target", target);
         obj.put("result", result);
-        appendToFile("actions.json", gson.toJson(obj));
+        appendToFile("actions.json", jsonGson.toJson(obj));
     }
 
     private void appendToFile(String fileName, String line) {

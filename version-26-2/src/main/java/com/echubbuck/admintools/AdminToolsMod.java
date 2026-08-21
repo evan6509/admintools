@@ -40,11 +40,12 @@ public class AdminToolsMod implements ModInitializer {
         var uidType = ItemUidComponent.TYPE;
 
         itemLedger = new ItemLedger();
+        itemLedger.setMaxEntries(configManager.getInt("ledger_max_entries", 5000));
         itemIdentityManager = new ItemIdentityManager(itemLedger);
-        itemEventSink = new ItemEventSink(itemIdentityManager);
         itemDuplicateDetector = new ItemDuplicateDetector(itemIdentityManager);
         itemDuplicateDetector.setDetectCreative(configManager.getBoolean("detect_creative_duplicates", false));
         itemMovementTracker = new ItemMovementTracker(itemIdentityManager, itemDuplicateDetector);
+        itemEventSink = new ItemEventSink(itemIdentityManager, itemMovementTracker);
 
         registerCommands();
         registerEvents();
@@ -62,7 +63,15 @@ public class AdminToolsMod implements ModInitializer {
     }
 
     private void registerEvents() {
-        ServerTickEvents.START_LEVEL_TICK.register(itemMovementTracker::onStartTick);
+        ServerTickEvents.START_SERVER_TICK.register(itemMovementTracker::onServerTick);
+
+        PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
+            if (player != null) {
+                // Mark before drops are spawned; AFTER is too late for some blocks.
+                itemEventSink.onBreak(player);
+            }
+            return true;
+        });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             var player = handler.getPlayer();
@@ -71,14 +80,29 @@ public class AdminToolsMod implements ModInitializer {
             }
         });
 
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            var player = handler.getPlayer();
+            if (player != null) {
+                itemMovementTracker.forgetPlayer(player.getUUID());
+                itemEventSink.forgetPlayer(player.getUUID());
+                heuristicEngine.forget(player.getUUID());
+            }
+        });
+
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             itemLedger.save();
+            itemLedger.close();
         });
 
         PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
             if (player != null) {
                 heuristicTracker.recordBreak(player.getUUID(), state.getBlock());
-                itemEventSink.onBreak(player);
+            }
+        });
+
+        PlayerBlockBreakEvents.CANCELED.register((world, player, pos, state, blockEntity) -> {
+            if (player != null) {
+                itemEventSink.forgetPlayer(player.getUUID());
             }
         });
     }
@@ -87,6 +111,7 @@ public class AdminToolsMod implements ModInitializer {
     public static ActionLogger getActionLogger() { return actionLogger; }
     public static ConfigManager getConfigManager() { return configManager; }
     public static HeuristicEngine getHeuristicEngine() { return heuristicEngine; }
+    public static HeuristicTracker getHeuristicTracker() { return heuristicTracker; }
 
     public static ItemLedger getItemLedger() { return itemLedger; }
     public static ItemIdentityManager getItemIdentityManager() { return itemIdentityManager; }

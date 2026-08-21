@@ -30,8 +30,17 @@ public class ItemIdentityManager {
         UUID uid = UUID.randomUUID();
         ItemUidComponent.set(stack, uid);
         ItemIdentity identity = ItemIdentity.create(source, creator);
-        ledger.registerIdentity(identity, itemId(stack), stack.getCount(), ownerName, "player:" + ownerName);
+        String ownerKey = ownerKey(ownerName);
+        ledger.registerIdentity(identity, itemId(stack), stack.getCount(), ownerName, ownerKey);
+        if (ownerName != null) {
+            ledger.setCreatorName(identity.uidString(), ownerName);
+        }
         return uid;
+    }
+
+    /** Location key for an owner name; null-safe for unattributed (ground-spawned) stacks. */
+    public static String ownerKey(String ownerName) {
+        return ownerName == null ? "unattributed" : "player:" + ownerName;
     }
 
     public UUID getIdentity(ItemStack stack) {

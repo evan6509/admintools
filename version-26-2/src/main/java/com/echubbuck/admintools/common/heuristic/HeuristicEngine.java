@@ -52,6 +52,16 @@ public class HeuristicEngine {
         return playerData.get(uuid);
     }
 
+    public Iterable<Map.Entry<UUID, HeuristicData>> allData() {
+        return playerData.entrySet();
+    }
+
+    /** Drops all tracked state for a player (logout cleanup). */
+    public void forget(UUID uuid) {
+        playerData.remove(uuid);
+        riskScores.remove(uuid);
+    }
+
     public void reset(UUID uuid) {
         HeuristicData data = playerData.get(uuid);
         if (data != null) data.reset();

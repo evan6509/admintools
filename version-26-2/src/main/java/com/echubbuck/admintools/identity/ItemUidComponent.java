@@ -9,8 +9,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 public final class ItemUidComponent {
@@ -49,21 +47,32 @@ public final class ItemUidComponent {
     /**
      * Compares two component maps for equality, ignoring the uid component so
      * that vanilla stacking/merging logic is unaffected by item identity.
+     *
+     * <p>Allocation-free: runs on the hot path (every stack merge/split check),
+     * so it counts non-uid components and compares values via lookups instead
+     * of building temporary maps.
      */
     public static boolean sameComponentsIgnoringUid(DataComponentMap a, DataComponentMap b) {
         if (a == b) return true;
-        Map<DataComponentType<?>, Object> ma = collect(a);
-        Map<DataComponentType<?>, Object> mb = collect(b);
-        return ma.equals(mb);
+        int sizeA = 0;
+        for (DataComponentType<?> type : a.keySet()) {
+            if (type != TYPE) sizeA++;
+        }
+        int sizeB = 0;
+        for (DataComponentType<?> type : b.keySet()) {
+            if (type != TYPE) sizeB++;
+        }
+        if (sizeA != sizeB) return false;
+        for (TypedDataComponent<?> tc : a) {
+            DataComponentType<?> type = tc.type();
+            if (type == TYPE) continue;
+            if (!java.util.Objects.equals(tc.value(), getRaw(b, type))) return false;
+        }
+        return true;
     }
 
-    private static Map<DataComponentType<?>, Object> collect(DataComponentMap map) {
-        Map<DataComponentType<?>, Object> out = new HashMap<>();
-        for (TypedDataComponent<?> tc : map) {
-            if (!tc.type().equals(TYPE)) {
-                out.put(tc.type(), tc.value());
-            }
-        }
-        return out;
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object getRaw(DataComponentMap map, DataComponentType<?> type) {
+        return map.get((DataComponentType) type);
     }
 }

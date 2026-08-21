@@ -52,16 +52,47 @@ public class AdminItemCommand {
             return 0;
         }
 
-        AdminToolsMod.getItemEventSink().onGive(target, stack);
+        var inventory = target.getInventory();
+        int[] beforeCounts = new int[inventory.getContainerSize()];
+        for (int i = 0; i < beforeCounts.length; i++) {
+            ItemStack existing = inventory.getItem(i);
+            if (!existing.isEmpty() && existing.getItem() == input.item().value()) {
+                beforeCounts[i] = existing.getCount();
+            }
+        }
+
+        String itemId = AdminToolsMod.getItemIdentityManager().itemId(stack);
+        String itemName = stack.getItemName().getString();
         boolean added = target.addItem(stack);
+        int delivered = 0;
+        for (int i = 0; i < beforeCounts.length; i++) {
+            ItemStack output = inventory.getItem(i);
+            if (output.isEmpty() || output.getItem() != input.item().value()) continue;
+            int delta = output.getCount() - beforeCounts[i];
+            if (delta > 0) {
+                AdminToolsMod.getItemEventSink().onDeliveredGive(
+                        target, output, delta, ctx.getSource().getTextName());
+                delivered += delta;
+            }
+        }
+
+        if (delivered < count) {
+            int undelivered = count - delivered;
+            if (stack.isEmpty()) {
+                stack = new ItemStack(input.item().value(), undelivered);
+            }
+            AdminToolsMod.getItemEventSink().onUndeliveredGive(
+                    target, stack, undelivered, ctx.getSource().getTextName());
+        }
+
         if (!added) {
             ctx.getSource().sendFailure(Component.literal(target.getScoreboardName() + "'s inventory is full."));
             return 0;
         }
-        ctx.getSource().sendSuccess(() -> Component.literal("§aGave " + count + "x " + stack.getItemName().getString()
+        ctx.getSource().sendSuccess(() -> Component.literal("§aGave " + count + "x " + itemName
                 + " to " + target.getScoreboardName()), true);
         AdminToolsMod.getActionLogger().log(ctx.getSource().getTextName(), "ADMIN_ITEM_GIVE", target.getScoreboardName(),
-                count + "x " + AdminToolsMod.getItemIdentityManager().itemId(stack));
+                count + "x " + itemId);
         return 1;
     }
 
@@ -78,11 +109,18 @@ public class AdminItemCommand {
             if (s.isEmpty() || s.getItem() != item) continue;
             int take = Math.min(remaining, s.getCount());
             var uid = AdminToolsMod.getItemIdentityManager().getIdentity(s);
+            String itemId = AdminToolsMod.getItemIdentityManager().itemId(s);
             inv.removeItem(i, take);
             if (uid != null) {
-                AdminToolsMod.getItemLedger().setStatus(uid.toString(), "REMOVED");
+                ItemStack remainingStack = inv.getItem(i);
+                if (remainingStack.isEmpty()) {
+                    AdminToolsMod.getItemLedger().setStatus(uid.toString(), "REMOVED");
+                    AdminToolsMod.getItemLedger().setOwnerLocation(uid.toString(), target.getScoreboardName(), "removed");
+                } else {
+                    AdminToolsMod.getItemLedger().updateCount(uid.toString(), remainingStack.getCount());
+                }
                 AdminToolsMod.getItemLedger().recordEvent(ItemMovementEvent.of(
-                        uid.toString(), ItemAction.ADMIN_REMOVE, AdminToolsMod.getItemIdentityManager().itemId(s),
+                        uid.toString(), ItemAction.ADMIN_REMOVE, itemId,
                         take, ctx.getSource().getTextName(), target.getScoreboardName(), "removed", "removed"));
             }
             removed += take;

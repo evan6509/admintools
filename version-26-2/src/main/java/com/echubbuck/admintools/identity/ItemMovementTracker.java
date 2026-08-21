@@ -2,24 +2,35 @@ package com.echubbuck.admintools.identity;
 
 import com.echubbuck.admintools.common.ItemAction;
 import com.echubbuck.admintools.common.ItemMovementEvent;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 public class ItemMovementTracker {
+    /** How long a sink-recorded drop/pickup suppresses the diff-side duplicate event. */
+    private static final int SINK_MEMORY_TICKS = 3;
+    /** How long a container deposit waits for a matching withdrawal before expiring. */
+    private static final int CONTAINER_MEMORY_TICKS = 600;
+
     private final ItemIdentityManager identityManager;
     private final ItemDuplicateDetector duplicateDetector;
 
     private final Map<UUID, Map<String, Integer>> prevCounts = new HashMap<>();
     private final Map<UUID, Map<String, String>> prevItems = new HashMap<>();
+    /** Uids the event sink already logged as DROP/PICKUP -> tick stamp, to avoid double logging. */
+    private final Map<String, Integer> sinkDrops = new HashMap<>();
+    private final Map<String, Integer> sinkPickups = new HashMap<>();
+    /** Uids seen disappearing into an open container -> tick stamp, for withdrawal attribution. */
+    private final Map<String, Integer> containerDeposits = new HashMap<>();
     private int tickCounter = 0;
 
     public ItemMovementTracker(ItemIdentityManager identityManager, ItemDuplicateDetector duplicateDetector) {
@@ -30,6 +41,20 @@ public class ItemMovementTracker {
     public ItemIdentityManager identityManager() {
         return identityManager;
     }
+
+    // --- Hooks from ItemEventSink ---
+
+    /** The sink logged a DROP for this uid; the diff should not log a second one. */
+    public void noteSinkDrop(String uid) {
+        sinkDrops.put(uid, tickCounter);
+    }
+
+    /** The sink logged a PICKUP for this uid; the diff should not log UNKNOWN arrival. */
+    public void noteSinkPickup(String uid) {
+        sinkPickups.put(uid, tickCounter);
+    }
+
+    // --- Lifecycle ---
 
     /** Seeds the snapshot for a newly-joined player without emitting movement events. */
     public void baselinePlayer(ServerPlayer player) {
@@ -46,15 +71,36 @@ public class ItemMovementTracker {
         prevItems.put(puuid, items);
     }
 
-    public void onStartTick(ServerLevel world) {
+    /**
+     * Once-per-tick maintenance. Registered on START_SERVER_TICK (not per-level,
+     * which would run the scans once per dimension).
+     */
+    public void onServerTick(MinecraftServer server) {
         tickCounter++;
-        scanAll(world);
+        scanAll(server);
         if (tickCounter % 100 == 0) { // every ~5 seconds
-            duplicateDetector.scan(world);
+            duplicateDetector.scanPlayers(server.getPlayerList().getPlayers());
         }
         if (tickCounter % 600 == 0) { // every ~30 seconds
             identityManager.ledger().saveIfDirty();
         }
+    }
+
+    /** Drops all per-player state on logout so the maps stay bounded. */
+    public void forgetPlayer(UUID uuid) {
+        prevCounts.remove(uuid);
+        prevItems.remove(uuid);
+    }
+
+    private boolean sinkRecorded(Map<String, Integer> memory, String uid) {
+        Integer t = memory.get(uid);
+        return t != null && tickCounter - t <= SINK_MEMORY_TICKS;
+    }
+
+    private boolean withdrawnFromContainer(String uid) {
+        if (containerDeposits.containsKey(uid)) return true;
+        var entry = identityManager.ledger().entry(uid);
+        return entry != null && "container".equals(entry.currentOwner);
     }
 
     private static final class PlayerDelta {
@@ -62,6 +108,7 @@ public class ItemMovementTracker {
         final String name;
         final Map<String, Integer> deltas = new HashMap<>(); // uid -> count delta
         final Map<String, String> item = new HashMap<>();    // uid -> itemId
+        final Set<String> externallyLoggedLosses = new HashSet<>(); // sink DROP or container deposit
 
         PlayerDelta(UUID player, String name) {
             this.player = player;
@@ -69,12 +116,27 @@ public class ItemMovementTracker {
         }
     }
 
-    private void scanAll(ServerLevel world) {
+    private void scanAll(MinecraftServer server) {
         List<PlayerDelta> deltas = new ArrayList<>();
-        for (ServerPlayer player : world.getServer().getPlayerList().getPlayers()) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             deltas.add(scanPlayer(player));
         }
         correlateTransfers(deltas);
+        pruneMemories();
+    }
+
+    private void pruneMemories() {
+        pruneMemory(sinkDrops, SINK_MEMORY_TICKS * 8);
+        pruneMemory(sinkPickups, SINK_MEMORY_TICKS * 8);
+        pruneMemory(containerDeposits, CONTAINER_MEMORY_TICKS);
+    }
+
+    private void pruneMemory(Map<String, Integer> memory, int maxAgeTicks) {
+        if (memory.isEmpty()) return;
+        Iterator<Map.Entry<String, Integer>> it = memory.entrySet().iterator();
+        while (it.hasNext()) {
+            if (tickCounter - it.next().getValue() > maxAgeTicks) it.remove();
+        }
     }
 
     private PlayerDelta scanPlayer(ServerPlayer player) {
@@ -98,7 +160,7 @@ public class ItemMovementTracker {
                 identityManager.ledger().addParent(nuid.toString(), u);
                 identityManager.ledger().recordEvent(ItemMovementEvent.of(
                         nuid.toString(), ItemAction.SPLIT, identityManager.itemId(s), s.getCount(),
-                        name, u, nuid.toString(), "player:" + name));
+                        name, u, nuid.toString(), ItemIdentityManager.ownerKey(name)));
                 u = nuid.toString();
             }
             currentCounts.merge(u, s.getCount(), Integer::sum);
@@ -114,8 +176,18 @@ public class ItemMovementTracker {
             int before = prev.getOrDefault(uid, -1);
             if (before == -1) {
                 pd.deltas.put(uid, now); // new identity (created by a hook or first observation)
-                identityManager.ledger().recordEvent(ItemMovementEvent.of(
-                        uid, ItemAction.UNKNOWN, pd.item.get(uid), now, name, null, name, "player:" + name));
+                if (withdrawnFromContainer(uid)) {
+                    // This uid was previously deposited into a container by someone; attribute the return.
+                    containerDeposits.remove(uid);
+                    identityManager.ledger().setOwnerLocation(uid, name, ItemIdentityManager.ownerKey(name));
+                    identityManager.ledger().recordEvent(ItemMovementEvent.of(
+                            uid, ItemAction.CONTAINER_WITHDRAWAL, pd.item.get(uid), now,
+                            "container", "container", name, ItemIdentityManager.ownerKey(name)));
+                } else if (!sinkRecorded(sinkPickups, uid)) {
+                    identityManager.ledger().recordEvent(ItemMovementEvent.of(
+                            uid, ItemAction.UNKNOWN, pd.item.get(uid), now, name, null, name,
+                            ItemIdentityManager.ownerKey(name)));
+                }
             } else if (before != now) {
                 pd.deltas.put(uid, now - before);
                 identityManager.ledger().updateCount(uid, now);
@@ -137,7 +209,8 @@ public class ItemMovementTracker {
                         identityManager.ledger().addParent(c.getKey(), uid);
                         identityManager.ledger().setStatus(uid, "MERGED");
                         identityManager.ledger().recordEvent(ItemMovementEvent.of(
-                                uid, ItemAction.MERGE, item, lost, name, uid, c.getKey(), "player:" + name));
+                                uid, ItemAction.MERGE, item, lost, name, uid, c.getKey(),
+                                ItemIdentityManager.ownerKey(name)));
                         merged = true;
                         break;
                     }
@@ -147,7 +220,21 @@ public class ItemMovementTracker {
                 // Identity left this player (dropped / moved / consumed / transferred).
                 pd.deltas.put(uid, -lost);
                 pd.item.putIfAbsent(uid, item == null ? "" : item);
-                identityManager.ledger().setOwnerLocation(uid, "ground", null);
+                if (sinkRecorded(sinkDrops, uid)) {
+                    // Exact drop already recorded by ItemEventSink.onDrop; sync location only.
+                    identityManager.ledger().setOwnerLocation(uid, "ground", null);
+                    pd.externallyLoggedLosses.add(uid);
+                } else if (player.containerMenu != null && player.containerMenu != player.inventoryMenu) {
+                    // Went straight into an open container GUI: a deposit, not a drop.
+                    identityManager.ledger().setOwnerLocation(uid, "container", null);
+                    containerDeposits.put(uid, tickCounter);
+                    identityManager.ledger().recordEvent(ItemMovementEvent.of(
+                            uid, ItemAction.CONTAINER_DEPOSIT, item == null ? "" : item, lost,
+                            name, name, "container", "container"));
+                    pd.externallyLoggedLosses.add(uid);
+                } else {
+                    identityManager.ledger().setOwnerLocation(uid, "ground", null);
+                }
             }
         }
 
@@ -171,9 +258,10 @@ public class ItemMovementTracker {
             if (involved.size() == 1) {
                 PlayerDelta pd = involved.get(0);
                 int delta = pd.deltas.get(uid);
-                if (delta < 0) {
+                if (delta < 0 && !pd.externallyLoggedLosses.contains(uid)) {
                     identityManager.ledger().recordEvent(ItemMovementEvent.of(
-                            uid, ItemAction.DROP, pd.item.get(uid), -delta, pd.name, pd.name, "ground", "player:" + pd.name));
+                            uid, ItemAction.DROP, pd.item.get(uid), -delta, pd.name, pd.name, "ground",
+                            ItemIdentityManager.ownerKey(pd.name)));
                 }
                 continue;
             }
@@ -190,19 +278,20 @@ public class ItemMovementTracker {
                         matched.add(to);
                         identityManager.ledger().recordEvent(ItemMovementEvent.of(
                                 uid, ItemAction.TRANSFER, from.item.getOrDefault(uid, ""), toDelta,
-                                from.name, from.name, to.name, "player:" + to.name));
-                        identityManager.ledger().setOwnerLocation(uid, to.name, "player:" + to.name);
+                                from.name, from.name, to.name, ItemIdentityManager.ownerKey(to.name)));
+                        identityManager.ledger().setOwnerLocation(uid, to.name, ItemIdentityManager.ownerKey(to.name));
                         break;
                     }
                 }
             }
-            // Any unpaired loss is a drop.
+            // Any unpaired loss is a drop (unless already logged by the sink or a container deposit).
             for (PlayerDelta pd : involved) {
                 if (matched.contains(pd)) continue;
                 int delta = pd.deltas.get(uid);
-                if (delta < 0) {
+                if (delta < 0 && !pd.externallyLoggedLosses.contains(uid)) {
                     identityManager.ledger().recordEvent(ItemMovementEvent.of(
-                            uid, ItemAction.DROP, pd.item.getOrDefault(uid, ""), -delta, pd.name, pd.name, "ground", "player:" + pd.name));
+                            uid, ItemAction.DROP, pd.item.getOrDefault(uid, ""), -delta, pd.name, pd.name,
+                            "ground", ItemIdentityManager.ownerKey(pd.name)));
                 }
             }
         }

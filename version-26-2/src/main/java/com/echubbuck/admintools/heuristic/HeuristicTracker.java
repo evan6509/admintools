@@ -2,16 +2,15 @@ package com.echubbuck.admintools.heuristic;
 
 import com.echubbuck.admintools.common.heuristic.HeuristicData;
 import com.echubbuck.admintools.common.heuristic.HeuristicEngine;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
-import java.util.*;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
-public class HeuristicTracker implements ServerTickEvents.StartLevelTick {
+public class HeuristicTracker {
     private final HeuristicEngine engine;
-    private int tickCounter = 0;
 
     private static final Set<Block> ORES = Set.of(
             Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE,
@@ -40,20 +39,27 @@ public class HeuristicTracker implements ServerTickEvents.StartLevelTick {
         }
     }
 
+    /** Called from BlockItemPlaceMixin for every successful block placement. */
     public void recordPlace(UUID playerUuid, Block block) {
         if (block == Blocks.TORCH || block == Blocks.SOUL_TORCH || block == Blocks.LANTERN || block == Blocks.SOUL_LANTERN) {
             engine.getOrCreate(playerUuid).recordTorchPlacement();
         }
     }
 
-    @Override
-    public void onStartTick(ServerLevel world) {
-        tickCounter++;
-        if (tickCounter % 40 == 0) { // every ~2 seconds
-            world.players().forEach(player -> {
-                engine.getOrCreate(player.getUUID());
-            });
+    /** Called from PlayerChunkSenderMixin whenever a chunk is sent to a player. */
+    public void recordChunkUpdate(UUID playerUuid) {
+        engine.getOrCreate(playerUuid).recordChunkUpdate();
+    }
+
+    /**
+     * Periodic maintenance: drops per-player data for players that have been
+     * inactive past the activity window so the maps stay bounded.
+     */
+    public void pruneInactive() {
+        for (Map.Entry<UUID, HeuristicData> e : engine.allData()) {
+            if (!e.getValue().isActive()) {
+                engine.forget(e.getKey());
+            }
         }
-        tickCounter %= 1000;
     }
 }

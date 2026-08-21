@@ -14,14 +14,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(BlockItem.class)
 public abstract class BlockItemPlaceMixin {
 
-    @Inject(method = "placeBlock", at = @At("HEAD"))
+    @Inject(method = "placeBlock", at = @At("RETURN"))
     private void admintools$onPlace(BlockPlaceContext context, BlockState state,
                                     CallbackInfoReturnable<Boolean> cir) {
-        if (AdminToolsMod.getItemEventSink() == null) return;
+        if (!cir.getReturnValue()) return;
         Player player = context.getPlayer();
         if (player == null) return;
         ItemStack hand = context.getItemInHand();
         if (hand == null || hand.isEmpty()) return;
-        AdminToolsMod.getItemEventSink().onPlace(player, hand);
+        if (AdminToolsMod.getItemEventSink() != null) {
+            AdminToolsMod.getItemEventSink().onPlace(player, hand);
+        }
+        if (AdminToolsMod.getHeuristicTracker() != null && state != null) {
+            AdminToolsMod.getHeuristicTracker().recordPlace(player.getUUID(), state.getBlock());
+        }
     }
 }
