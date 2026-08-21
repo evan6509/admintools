@@ -1,5 +1,6 @@
 package com.echubbuck.admintools.identity;
 
+import com.echubbuck.admintools.container.ContainerAuditTracker;
 import com.echubbuck.admintools.common.ItemAction;
 import com.echubbuck.admintools.common.ItemMovementEvent;
 import net.minecraft.server.MinecraftServer;
@@ -23,6 +24,7 @@ public class ItemMovementTracker {
 
     private final ItemIdentityManager identityManager;
     private final ItemDuplicateDetector duplicateDetector;
+    private final ContainerAuditTracker containerAuditTracker;
 
     private final Map<UUID, Map<String, Integer>> prevCounts = new HashMap<>();
     private final Map<UUID, Map<String, String>> prevItems = new HashMap<>();
@@ -34,8 +36,15 @@ public class ItemMovementTracker {
     private int tickCounter = 0;
 
     public ItemMovementTracker(ItemIdentityManager identityManager, ItemDuplicateDetector duplicateDetector) {
+        this(identityManager, duplicateDetector, null);
+    }
+
+    public ItemMovementTracker(ItemIdentityManager identityManager,
+                               ItemDuplicateDetector duplicateDetector,
+                               ContainerAuditTracker containerAuditTracker) {
         this.identityManager = identityManager;
         this.duplicateDetector = duplicateDetector;
+        this.containerAuditTracker = containerAuditTracker;
     }
 
     public ItemIdentityManager identityManager() {
@@ -176,7 +185,13 @@ public class ItemMovementTracker {
             int before = prev.getOrDefault(uid, -1);
             if (before == -1) {
                 pd.deltas.put(uid, now); // new identity (created by a hook or first observation)
-                if (withdrawnFromContainer(uid)) {
+                boolean containerEventLogged = containerAuditTracker != null
+                        && containerAuditTracker.consumeRecentlyLogged(uid);
+                boolean auditingContainer = containerAuditTracker != null
+                        && containerAuditTracker.hasActiveSession(puuid);
+                if (containerEventLogged || auditingContainer) {
+                    // The open container session will attribute this arrival precisely on close.
+                } else if (withdrawnFromContainer(uid)) {
                     // This uid was previously deposited into a container by someone; attribute the return.
                     containerDeposits.remove(uid);
                     identityManager.ledger().setOwnerLocation(uid, name, ItemIdentityManager.ownerKey(name));
@@ -220,9 +235,19 @@ public class ItemMovementTracker {
                 // Identity left this player (dropped / moved / consumed / transferred).
                 pd.deltas.put(uid, -lost);
                 pd.item.putIfAbsent(uid, item == null ? "" : item);
+                boolean containerEventLogged = containerAuditTracker != null
+                        && containerAuditTracker.consumeRecentlyLogged(uid);
                 if (sinkRecorded(sinkDrops, uid)) {
                     // Exact drop already recorded by ItemEventSink.onDrop; sync location only.
                     identityManager.ledger().setOwnerLocation(uid, "ground", null);
+                    pd.externallyLoggedLosses.add(uid);
+                } else if (containerEventLogged) {
+                    // Exact container audit already recorded this loss at menu close.
+                    pd.externallyLoggedLosses.add(uid);
+                } else if (containerAuditTracker != null
+                        && containerAuditTracker.hasActiveSession(puuid)) {
+                    // The open container session will attribute this loss precisely on close.
+                    identityManager.ledger().setOwnerLocation(uid, "container", null);
                     pd.externallyLoggedLosses.add(uid);
                 } else if (player.containerMenu != null && player.containerMenu != player.inventoryMenu) {
                     // Went straight into an open container GUI: a deposit, not a drop.

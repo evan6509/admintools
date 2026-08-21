@@ -25,6 +25,7 @@ Each version module builds a self-contained jar:
 | Role/permission management | `/adminrole grant\|remove\|assign` | OP2 | all |
 | Item identity & anti-dupe | `/itemtrace <uuid>` | OP4 | 26.2 |
 | Admin item give/remove | `/adminitem give\|remove <player> <item> [count]` | OP4 | 26.2 |
+| Container audit | `/containertrace <x> <y> <z>` | OP4 | 26.2 |
 
 - `/invsee` opens a 36-slot vanilla chest GUI backed by the target's real
   inventory; with `edit` (or `invsee_edit_mode` in config) it is writable.
@@ -47,6 +48,9 @@ splitting, and merging are unaffected.
   locations (player inventories / ender chests). Detection is alert-only —
   nothing is auto-removed. Creative-mode players are excluded unless
   `detect_creative_duplicates` is enabled.
+- Container audit records player sessions for chests, barrels, and shulker boxes,
+  including the opener, open duration, and item quantities added or removed.
+  Logs are written per container under `logs/admintools/containers/`.
 - Persistence: `config/admintools/item_ledger.json` (snapshot),
   `logs/admintools/item_ledger.jsonl` (movement events), and
   `logs/admintools/item_duplicates.jsonl` (duplicate alerts).
@@ -64,6 +68,7 @@ splitting, and merging are unaffected.
 | `log_actions_to_file` | `true` | Write action log |
 | `invsee_edit_mode` | `false` | Make `/invsee` writable by default |
 | `detect_creative_duplicates` | `false` | Include creative players in dupe detection |
+| `enable_container_audit` | `true` | Log player-opened chests, barrels, and shulker boxes |
 
 Roles live in `config/admintools/roles.json`.
 

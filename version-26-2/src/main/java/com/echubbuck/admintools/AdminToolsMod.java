@@ -2,6 +2,7 @@ package com.echubbuck.admintools;
 
 import com.echubbuck.admintools.common.*;
 import com.echubbuck.admintools.common.heuristic.HeuristicEngine;
+import com.echubbuck.admintools.container.ContainerAuditTracker;
 import com.echubbuck.admintools.commands.*;
 import com.echubbuck.admintools.gui.*;
 import com.echubbuck.admintools.heuristic.HeuristicTracker;
@@ -26,6 +27,7 @@ public class AdminToolsMod implements ModInitializer {
     private static ItemIdentityManager itemIdentityManager;
     private static ItemEventSink itemEventSink;
     private static ItemDuplicateDetector itemDuplicateDetector;
+    private static ContainerAuditTracker containerAuditTracker;
     private static ItemMovementTracker itemMovementTracker;
 
     @Override
@@ -44,7 +46,9 @@ public class AdminToolsMod implements ModInitializer {
         itemIdentityManager = new ItemIdentityManager(itemLedger);
         itemDuplicateDetector = new ItemDuplicateDetector(itemIdentityManager);
         itemDuplicateDetector.setDetectCreative(configManager.getBoolean("detect_creative_duplicates", false));
-        itemMovementTracker = new ItemMovementTracker(itemIdentityManager, itemDuplicateDetector);
+        containerAuditTracker = new ContainerAuditTracker(itemIdentityManager);
+        containerAuditTracker.setEnabled(configManager.getBoolean("enable_container_audit", true));
+        itemMovementTracker = new ItemMovementTracker(itemIdentityManager, itemDuplicateDetector, containerAuditTracker);
         itemEventSink = new ItemEventSink(itemIdentityManager, itemMovementTracker);
 
         registerCommands();
@@ -58,6 +62,7 @@ public class AdminToolsMod implements ModInitializer {
             XrayAuditCommand.register(dispatcher);
             AdminRoleCommand.register(dispatcher);
             ItemTraceCommand.register(dispatcher);
+            ContainerTraceCommand.register(dispatcher);
             AdminItemCommand.register(dispatcher, context);
         });
     }
@@ -83,6 +88,7 @@ public class AdminToolsMod implements ModInitializer {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             var player = handler.getPlayer();
             if (player != null) {
+                containerAuditTracker.forgetPlayer(player.getUUID());
                 itemMovementTracker.forgetPlayer(player.getUUID());
                 itemEventSink.forgetPlayer(player.getUUID());
                 heuristicEngine.forget(player.getUUID());
@@ -90,6 +96,7 @@ public class AdminToolsMod implements ModInitializer {
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            containerAuditTracker.close();
             itemLedger.save();
             itemLedger.close();
         });
@@ -117,5 +124,6 @@ public class AdminToolsMod implements ModInitializer {
     public static ItemIdentityManager getItemIdentityManager() { return itemIdentityManager; }
     public static ItemEventSink getItemEventSink() { return itemEventSink; }
     public static ItemDuplicateDetector getItemDuplicateDetector() { return itemDuplicateDetector; }
+    public static ContainerAuditTracker getContainerAuditTracker() { return containerAuditTracker; }
     public static ItemMovementTracker getItemMovementTracker() { return itemMovementTracker; }
 }
