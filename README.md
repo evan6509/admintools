@@ -93,8 +93,9 @@ Manual server testing (26.2):
 ./test-server/run-26-2.sh --offline  # if Gradle can't reach the network
 ```
 
-Server data goes to `version-26-2/run/`. The viewer GUIs are client-rendered,
-so a test client needs the built mod jar plus the Fabric API jar in `mods/`.
+Server data goes to `version-26-2/run/`. AdminTools is server-only; clients do
+not need the AdminTools jar, Fabric Loader, or Fabric API to connect. The
+viewer GUIs use vanilla menu types and are rendered by the vanilla client.
 Make yourself OP in the server console: OP4 for viewers/audit/trace, OP2 for
 `/adminrole`.
 
