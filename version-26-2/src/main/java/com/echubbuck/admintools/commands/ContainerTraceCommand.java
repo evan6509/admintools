@@ -9,8 +9,10 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.text.SimpleDateFormat;
@@ -33,14 +35,22 @@ public final class ContainerTraceCommand {
                                 .then(Commands.argument("z", IntegerArgumentType.integer())
                                         .executes(ctx -> execute(
                                                 ctx.getSource(),
+                                                ctx.getSource().getLevel(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
                                                 IntegerArgumentType.getInteger(ctx, "y"),
-                                                IntegerArgumentType.getInteger(ctx, "z")))))));
+                                                IntegerArgumentType.getInteger(ctx, "z")))
+                                        .then(Commands.argument("dimension", DimensionArgument.dimension())
+                                                .executes(ctx -> execute(
+                                                        ctx.getSource(),
+                                                        DimensionArgument.getDimension(ctx, "dimension"),
+                                                        IntegerArgumentType.getInteger(ctx, "x"),
+                                                        IntegerArgumentType.getInteger(ctx, "y"),
+                                                        IntegerArgumentType.getInteger(ctx, "z"))))))));
     }
 
-    private static int execute(CommandSourceStack source, int x, int y, int z) {
+    private static int execute(CommandSourceStack source, ServerLevel level, int x, int y, int z) {
         BlockPos pos = new BlockPos(x, y, z);
-        BlockEntity blockEntity = source.getLevel().getBlockEntity(pos);
+        BlockEntity blockEntity = level.getBlockEntity(pos);
         ContainerAuditTracker tracker = AdminToolsMod.getContainerAuditTracker();
         ContainerKey key = blockEntity == null ? null : tracker.keyFor(blockEntity);
         if (key == null) {

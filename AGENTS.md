@@ -25,6 +25,7 @@ build currently targets one supported version:
 | Per-player command access | `/adminaccess grant\|remove\|list` | UUID-keyed grants in `config/admintools/permissions.json`; OP4 bypasses grants |
 | Item identity & anti-dupe (26.2) | `/itemtrace <uuid> [page]` | Per-stack persistent identity (`admintools:uid` inside vanilla custom data), paged durable movement log, duplicate detection |
 | Admin item give/remove (26.2) | `/adminitem give\|remove` | Grants items with `ADMIN_GIVE` identity / removes items with `ADMIN_REMOVE` |
+| Container audit | `/containertrace <x> <y> <z> [dimension]` | Shared-session audit for chests (including double chests), barrels, and shulker boxes |
 
 Gating: viewer/trace/item commands accept their per-player permission node or
 OP4 (`Permissions.COMMANDS_GAMEMASTER`). `/adminaccess` itself requires OP4.

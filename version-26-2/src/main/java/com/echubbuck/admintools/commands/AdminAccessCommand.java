@@ -21,7 +21,7 @@ public final class AdminAccessCommand {
     private AdminAccessCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        var permission = Commands.argument("permission", StringArgumentType.word())
+        var permission = Commands.argument("permission", StringArgumentType.greedyString())
                 .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(PermissionNodes.VALUES, builder));
 
         dispatcher.register(Commands.literal("adminaccess")
@@ -33,7 +33,7 @@ public final class AdminAccessCommand {
                                         StringArgumentType.getString(ctx, "permission"), true)))))
                 .then(Commands.literal("remove")
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
-                                .then(Commands.argument("permission", StringArgumentType.word())
+                                .then(Commands.argument("permission", StringArgumentType.greedyString())
                                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(PermissionNodes.VALUES, builder))
                                         .executes(ctx -> change(ctx.getSource(),
                                                 GameProfileArgument.getGameProfiles(ctx, "player"),
@@ -46,6 +46,10 @@ public final class AdminAccessCommand {
 
     private static int change(CommandSourceStack source, Collection<NameAndId> players,
                               String permission, boolean grant) throws CommandSyntaxException {
+        if (!PermissionNodes.VALUES.contains(permission)) {
+            source.sendFailure(Component.literal("Unknown AdminTools permission: " + permission));
+            return 0;
+        }
         int changed = 0;
         for (NameAndId player : players) {
             boolean didChange = grant

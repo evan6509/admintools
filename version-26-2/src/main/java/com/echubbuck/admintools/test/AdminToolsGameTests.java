@@ -5,12 +5,16 @@ import com.echubbuck.admintools.common.ItemAction;
 import com.echubbuck.admintools.common.ItemLedgerEntry;
 import com.echubbuck.admintools.common.ItemMovementEvent;
 import com.echubbuck.admintools.gui.InvSeeScreenHandler;
+import com.echubbuck.admintools.container.ContainerAuditEvent;
+import com.echubbuck.admintools.container.ContainerKey;
 import com.echubbuck.admintools.identity.ItemUidComponent;
 import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.impl.registry.sync.RegistrySyncManager;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -22,6 +26,12 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 
 import java.util.Map;
 import java.util.UUID;
@@ -252,6 +262,71 @@ public class AdminToolsGameTests {
             helper.succeed();
         } else {
             helper.fail("read-only invsee allowed an item pickup");
+        }
+    }
+
+    @GameTest
+    public void concurrentContainerViewersShareOneSession(GameTestHelper helper) {
+        BlockPos pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.BARREL);
+        BarrelBlockEntity barrel = helper.getBlockEntity(pos, BarrelBlockEntity.class);
+        ServerPlayer first = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ServerPlayer second = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        var tracker = AdminToolsMod.getContainerAuditTracker();
+        tracker.setEnabled(true);
+        ContainerKey key = tracker.keyFor(barrel);
+        int before = tracker.recentFor(key, 20).size();
+
+        tracker.onOpen(first, barrel);
+        tracker.onOpen(second, barrel);
+        barrel.setItem(0, new ItemStack(Items.IRON_INGOT, 4));
+        tracker.onClose(first, barrel);
+        int afterFirstClose = tracker.recentFor(key, 20).size();
+        tracker.onClose(second, barrel);
+        java.util.List<ContainerAuditEvent> events = tracker.recentFor(key, 20);
+
+        ContainerAuditEvent event = events.isEmpty() ? null : events.getLast();
+        if (afterFirstClose == before && events.size() == before + 1
+                && event != null && event.player().startsWith("multiple:")
+                && event.added().getOrDefault("minecraft:iron_ingot", 0) == 4) {
+            helper.succeed();
+        } else {
+            helper.fail("overlapping viewers were not combined into one shared session");
+        }
+    }
+
+    @GameTest
+    public void doubleChestUsesCanonicalCombinedAudit(GameTestHelper helper) {
+        BlockPos leftPos = new BlockPos(1, 1, 1);
+        BlockPos rightPos = new BlockPos(2, 1, 1);
+        BlockState leftState = Blocks.CHEST.defaultBlockState()
+                .setValue(ChestBlock.FACING, Direction.NORTH)
+                .setValue(ChestBlock.TYPE, ChestType.LEFT);
+        BlockState rightState = Blocks.CHEST.defaultBlockState()
+                .setValue(ChestBlock.FACING, Direction.NORTH)
+                .setValue(ChestBlock.TYPE, ChestType.RIGHT);
+        helper.setBlock(leftPos, leftState);
+        helper.setBlock(rightPos, rightState);
+        helper.setBlock(leftPos, leftState);
+        ChestBlockEntity left = helper.getBlockEntity(leftPos, ChestBlockEntity.class);
+        ChestBlockEntity right = helper.getBlockEntity(rightPos, ChestBlockEntity.class);
+        ServerPlayer player = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        var tracker = AdminToolsMod.getContainerAuditTracker();
+        tracker.setEnabled(true);
+        ContainerKey leftKey = tracker.keyFor(left);
+        ContainerKey rightKey = tracker.keyFor(right);
+
+        tracker.onOpen(player, left);
+        right.setItem(0, new ItemStack(Items.DIAMOND, 2));
+        tracker.onClose(player, left);
+        java.util.List<ContainerAuditEvent> events = tracker.recentFor(leftKey, 20);
+        ContainerAuditEvent event = events.isEmpty() ? null : events.getLast();
+
+        if (leftKey.equals(rightKey) && event != null
+                && event.added().getOrDefault("minecraft:diamond", 0) == 2) {
+            helper.succeed();
+        } else {
+            helper.fail("double chest halves did not share a combined audit session");
         }
     }
 

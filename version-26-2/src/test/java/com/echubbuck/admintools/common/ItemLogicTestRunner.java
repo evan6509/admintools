@@ -23,6 +23,7 @@ public class ItemLogicTestRunner {
         ItemIdentityTest.run();
         ItemLedgerTest.run();
         PermissionManagerTest.run();
+        ConfigManagerTest.run();
         System.out.println("[AdminTools] ALL UNIT TESTS PASSED");
     }
 
@@ -181,6 +182,28 @@ public class ItemLogicTestRunner {
             isTrue(reloaded.hasPermission(player, PermissionNodes.INVSEE_EDIT), "permission persistence");
             isTrue(reloaded.remove(player, PermissionNodes.INVSEE_EDIT), "permission removal changes state");
             isTrue(!reloaded.hasPermission(player, PermissionNodes.INVSEE_EDIT), "removed permission denied");
+            reloaded.grant(player, PermissionNodes.ALL);
+            isTrue(reloaded.hasPermission(player, PermissionNodes.ENDERSEE), "global wildcard");
+        }
+    }
+
+    // ---- Configuration reload ----
+
+    static class ConfigManagerTest {
+        static void run() throws Exception {
+            Path tmp = Files.createTempDirectory("admintools-config-test");
+            Path path = tmp.resolve("config.json");
+            ConfigManager manager = new ConfigManager(path);
+            isTrue(manager.getBoolean("enable_inventory_viewer", false), "default config created");
+
+            Files.writeString(path, "{\"enable_inventory_viewer\":false}");
+            isTrue(manager.load(), "valid config reload");
+            isTrue(!manager.getBoolean("enable_inventory_viewer", true), "reloaded config applied");
+            eq(5000, manager.getInt("ledger_max_entries", 0), "missing defaults merged");
+
+            Files.writeString(path, "{not valid json");
+            isTrue(!manager.load(), "invalid config rejected");
+            isTrue(!manager.getBoolean("enable_inventory_viewer", true), "invalid reload preserves settings");
         }
     }
 }

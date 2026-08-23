@@ -6,33 +6,52 @@ import java.nio.file.*;
 import java.util.*;
 
 public class ConfigManager {
-    private static final Path CONFIG_PATH = Path.of("config", "admintools", "config.json");
+    private static final Path DEFAULT_CONFIG_PATH = Path.of("config", "admintools", "config.json");
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private final Path configPath;
     private JsonObject config;
 
     public ConfigManager() {
+        this(DEFAULT_CONFIG_PATH);
+    }
+
+    /** Test hook for redirecting configuration persistence. */
+    public ConfigManager(Path configPath) {
+        this.configPath = configPath;
         config = defaultConfig();
         load();
     }
 
-    public void load() {
+    public boolean load() {
         try {
-            if (Files.exists(CONFIG_PATH)) {
-                String content = Files.readString(CONFIG_PATH);
-                config = gson.fromJson(content, JsonObject.class);
-                if (config == null) config = defaultConfig();
+            if (Files.exists(configPath)) {
+                String content = Files.readString(configPath);
+                JsonObject loaded = gson.fromJson(content, JsonObject.class);
+                if (loaded == null) throw new JsonParseException("configuration root must be an object");
+                JsonObject merged = defaultConfig();
+                loaded.entrySet().forEach(entry -> merged.add(entry.getKey(), entry.getValue()));
+                config = merged;
             } else {
                 save();
             }
+            return true;
         } catch (Exception e) {
-            config = defaultConfig();
+            System.err.println("[AdminTools] Failed to load config: " + e.getMessage());
+            return false;
         }
     }
 
     public void save() {
         try {
-            Files.createDirectories(CONFIG_PATH.getParent());
-            Files.writeString(CONFIG_PATH, gson.toJson(config));
+            Files.createDirectories(configPath.getParent());
+            Path temporary = configPath.resolveSibling(configPath.getFileName() + ".tmp");
+            Files.writeString(temporary, gson.toJson(config));
+            try {
+                Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             System.err.println("[AdminTools] Failed to save config: " + e.getMessage());
         }
@@ -58,7 +77,6 @@ public class ConfigManager {
         JsonObject obj = new JsonObject();
         obj.addProperty("enable_inventory_viewer", true);
         obj.addProperty("enable_ender_chest_viewer", true);
-        obj.addProperty("max_command_rate", 10);
         obj.addProperty("log_actions_to_file", true);
         obj.addProperty("invsee_edit_mode", false);
         obj.addProperty("detect_creative_duplicates", false);

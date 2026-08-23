@@ -14,6 +14,7 @@ public class ActionLogger {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     /** Compact Gson for line-oriented JSON; pretty output would break line parsing. */
     private final Gson jsonGson = new Gson();
+    private volatile boolean writeToFile = true;
 
     public ActionLogger() {
         try {
@@ -27,7 +28,7 @@ public class ActionLogger {
         String timestamp = LocalDateTime.now().format(FMT);
         String line = String.format("[%s] %s | %s | %s | %s", timestamp, adminName, action, target, result);
         System.out.println(line);
-        appendToFile("actions.log", line);
+        if (writeToFile) appendToFile("actions.log", line);
     }
 
     public void logJson(String adminName, String action, String target, String result) {
@@ -37,7 +38,11 @@ public class ActionLogger {
         obj.put("action", action);
         obj.put("target", target);
         obj.put("result", result);
-        appendToFile("actions.json", jsonGson.toJson(obj));
+        if (writeToFile) appendToFile("actions.json", jsonGson.toJson(obj));
+    }
+
+    public void setWriteToFile(boolean writeToFile) {
+        this.writeToFile = writeToFile;
     }
 
     private void appendToFile(String fileName, String line) {

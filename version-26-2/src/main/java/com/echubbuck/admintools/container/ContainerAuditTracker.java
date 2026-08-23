@@ -8,7 +8,9 @@ import com.google.gson.Gson;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,7 +34,8 @@ public class ContainerAuditTracker {
     private final ItemIdentityManager identityManager;
     private final ItemLedger ledger;
     private final Gson gson = new Gson();
-    private final Map<SessionKey, Session> sessions = new HashMap<>();
+    /** One shared session per physical container, even when several players have it open. */
+    private final Map<String, Session> sessions = new HashMap<>();
     private final Map<String, Long> recentlyLoggedUids = new HashMap<>();
     private final Deque<ContainerAuditEvent> recentEvents = new ArrayDeque<>();
     private boolean enabled = true;
@@ -43,6 +46,7 @@ public class ContainerAuditTracker {
     }
 
     public void setEnabled(boolean enabled) {
+        if (this.enabled && !enabled) close();
         this.enabled = enabled;
     }
 
@@ -52,8 +56,8 @@ public class ContainerAuditTracker {
 
     public synchronized boolean hasActiveSession(UUID playerUuid) {
         if (!enabled) return false;
-        for (SessionKey key : sessions.keySet()) {
-            if (key.player().equals(playerUuid)) return true;
+        for (Session session : sessions.values()) {
+            if (session.activePlayers().contains(playerUuid)) return true;
         }
         return false;
     }
@@ -74,14 +78,23 @@ public class ContainerAuditTracker {
         ContainerKey key = keyFor(blockEntity);
         if (key == null) return;
 
-        SessionKey sessionKey = new SessionKey(player.getUUID(), key.id());
-        if (sessions.containsKey(sessionKey)) return;
-        sessions.put(sessionKey, new Session(
-                sessionKey,
+        Session existing = sessions.get(key.id());
+        if (existing != null) {
+            existing.players().putIfAbsent(player.getUUID(), player.getScoreboardName());
+            existing.activePlayers().add(player.getUUID());
+            return;
+        }
+        Map<UUID, String> players = new LinkedHashMap<>();
+        players.put(player.getUUID(), player.getScoreboardName());
+        java.util.Set<UUID> activePlayers = new java.util.HashSet<>();
+        activePlayers.add(player.getUUID());
+        Container resolved = resolveContainer(blockEntity);
+        sessions.put(key.id(), new Session(
                 key,
-                container,
-                player.getScoreboardName(),
-                snapshot(container, key),
+                resolved,
+                players,
+                activePlayers,
+                snapshot(resolved, key),
                 System.currentTimeMillis()));
     }
 
@@ -89,17 +102,22 @@ public class ContainerAuditTracker {
         if (!enabled || !(blockEntity instanceof Container)) return;
         ContainerKey key = keyFor(blockEntity);
         if (key == null) return;
-        finish(new SessionKey(player.getUUID(), key.id()));
+        Session session = sessions.get(key.id());
+        if (session == null) return;
+        session.activePlayers().remove(player.getUUID());
+        if (session.activePlayers().isEmpty()) finish(key.id());
     }
 
     /** Flushes sessions when a player disconnects so their last changes are not lost. */
     public synchronized void forgetPlayer(UUID playerUuid) {
-        Iterator<Map.Entry<SessionKey, Session>> it = sessions.entrySet().iterator();
+        Iterator<Map.Entry<String, Session>> it = sessions.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<SessionKey, Session> entry = it.next();
-            if (entry.getKey().player().equals(playerUuid)) {
+            Map.Entry<String, Session> entry = it.next();
+            Session session = entry.getValue();
+            session.activePlayers().remove(playerUuid);
+            if (session.activePlayers().isEmpty()) {
                 it.remove();
-                finish(entry.getValue());
+                finish(session);
             }
         }
     }
@@ -113,16 +131,14 @@ public class ContainerAuditTracker {
 
     public synchronized List<ContainerAuditEvent> recentFor(ContainerKey key, int limit) {
         if (limit <= 0) return List.of();
-        List<ContainerAuditEvent> out = readEvents(key);
-        int from = Math.max(0, out.size() - limit);
-        return new ArrayList<>(out.subList(from, out.size()));
+        return readRecentEvents(key, limit);
     }
 
     public synchronized List<ContainerAuditEvent> recentEvents() {
         return new ArrayList<>(recentEvents);
     }
 
-    private void finish(SessionKey key) {
+    private void finish(String key) {
         Session session = sessions.remove(key);
         if (session != null) finish(session);
     }
@@ -148,7 +164,7 @@ public class ContainerAuditTracker {
             String itemId = current.containsKey(uid)
                     ? current.get(uid).itemId()
                     : session.baselineItems().getOrDefault(uid, "minecraft:unknown");
-            String playerName = session.playerName();
+            String playerName = playerNames(session);
             if (delta > 0) {
                 added.merge(itemId, delta, Integer::sum);
                 ledger.setOwnerLocation(uid, "container", session.containerKey().location());
@@ -169,8 +185,8 @@ public class ContainerAuditTracker {
         ContainerAuditEvent event = new ContainerAuditEvent(
                 session.openedAt(),
                 System.currentTimeMillis(),
-                session.playerName(),
-                session.sessionKey().player().toString(),
+                playerNames(session),
+                playerUuids(session),
                 session.containerKey().dimension(),
                 session.containerKey().type(),
                 session.containerKey().x(),
@@ -201,6 +217,17 @@ public class ContainerAuditTracker {
         return out;
     }
 
+    private Container resolveContainer(BlockEntity blockEntity) {
+        if (blockEntity instanceof ChestBlockEntity
+                && blockEntity.getLevel() != null
+                && blockEntity.getBlockState().getBlock() instanceof ChestBlock chestBlock) {
+            Container combined = ChestBlock.getContainer(chestBlock, blockEntity.getBlockState(),
+                    blockEntity.getLevel(), blockEntity.getBlockPos(), true);
+            if (combined != null) return combined;
+        }
+        return (Container) blockEntity;
+    }
+
     private void append(ContainerAuditEvent event) {
         Path path = logPath(event.key());
         try {
@@ -212,21 +239,29 @@ public class ContainerAuditTracker {
         }
     }
 
-    private List<ContainerAuditEvent> readEvents(ContainerKey key) {
+    private List<ContainerAuditEvent> readRecentEvents(ContainerKey key, int limit) {
         Path path = logPath(key);
         if (!Files.exists(path)) return List.of();
-        List<ContainerAuditEvent> events = new ArrayList<>();
-        try {
-            for (String line : Files.readAllLines(path)) {
+        Deque<ContainerAuditEvent> events = new ArrayDeque<>(limit);
+        try (var reader = Files.newBufferedReader(path)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
                 if (!line.isBlank()) {
-                    ContainerAuditEvent event = gson.fromJson(line, ContainerAuditEvent.class);
-                    if (event != null) events.add(event);
+                    try {
+                        ContainerAuditEvent event = gson.fromJson(line, ContainerAuditEvent.class);
+                        if (event != null) {
+                            events.addLast(event);
+                            if (events.size() > limit) events.removeFirst();
+                        }
+                    } catch (Exception ignored) {
+                        // Keep earlier valid sessions if the final line was truncated.
+                    }
                 }
             }
         } catch (Exception e) {
             System.err.println("[AdminTools] Container audit read failed: " + e.getMessage());
         }
-        return events;
+        return new ArrayList<>(events);
     }
 
     private Path logPath(ContainerKey key) {
@@ -238,15 +273,13 @@ public class ContainerAuditTracker {
         return value.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
-    private record SessionKey(UUID player, String containerId) {}
-
     private record StackSnapshot(String itemId, int count) {}
 
     private record Session(
-            SessionKey sessionKey,
             ContainerKey containerKey,
             Container container,
-            String playerName,
+            Map<UUID, String> players,
+            java.util.Set<UUID> activePlayers,
             Map<String, StackSnapshot> baseline,
             long openedAt) {
 
@@ -265,5 +298,16 @@ public class ContainerAuditTracker {
             }
             return items;
         }
+    }
+
+    private static String playerNames(Session session) {
+        if (session.players().isEmpty()) return "disconnected";
+        if (session.players().size() == 1) return session.players().values().iterator().next();
+        return "multiple:" + String.join(",", session.players().values());
+    }
+
+    private static String playerUuids(Session session) {
+        return session.players().keySet().stream().map(UUID::toString)
+                .collect(java.util.stream.Collectors.joining(","));
     }
 }

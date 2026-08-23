@@ -37,14 +37,12 @@ public class AdminToolsMod implements ModInitializer {
         var legacyUidType = ItemUidComponent.LEGACY_TYPE;
 
         itemLedger = new ItemLedger();
-        itemLedger.setMaxEntries(configManager.getInt("ledger_max_entries", 5000));
         itemIdentityManager = new ItemIdentityManager(itemLedger);
         itemDuplicateDetector = new ItemDuplicateDetector(itemIdentityManager);
-        itemDuplicateDetector.setDetectCreative(configManager.getBoolean("detect_creative_duplicates", false));
         containerAuditTracker = new ContainerAuditTracker(itemIdentityManager);
-        containerAuditTracker.setEnabled(configManager.getBoolean("enable_container_audit", true));
         itemMovementTracker = new ItemMovementTracker(itemIdentityManager, itemDuplicateDetector, containerAuditTracker);
         itemEventSink = new ItemEventSink(itemIdentityManager, itemMovementTracker);
+        applyConfiguration();
 
         registerCommands();
         registerEvents();
@@ -58,6 +56,7 @@ public class AdminToolsMod implements ModInitializer {
             ItemTraceCommand.register(dispatcher);
             ContainerTraceCommand.register(dispatcher);
             AdminItemCommand.register(dispatcher, context);
+            AdminToolsCommand.register(dispatcher);
         });
     }
 
@@ -107,6 +106,21 @@ public class AdminToolsMod implements ModInitializer {
     }
     public static ActionLogger getActionLogger() { return actionLogger; }
     public static ConfigManager getConfigManager() { return configManager; }
+
+    public static boolean reloadConfiguration() {
+        boolean configLoaded = configManager.load();
+        boolean permissionsLoaded = permissionManager.load();
+        if (configLoaded) applyConfiguration();
+        return configLoaded && permissionsLoaded;
+    }
+
+    private static void applyConfiguration() {
+        actionLogger.setWriteToFile(configManager.getBoolean("log_actions_to_file", true));
+        itemLedger.setMaxEntries(configManager.getInt("ledger_max_entries", 5000));
+        itemDuplicateDetector.setDetectCreative(
+                configManager.getBoolean("detect_creative_duplicates", false));
+        containerAuditTracker.setEnabled(configManager.getBoolean("enable_container_audit", true));
+    }
 
     public static ItemLedger getItemLedger() { return itemLedger; }
     public static ItemIdentityManager getItemIdentityManager() { return itemIdentityManager; }

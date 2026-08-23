@@ -22,7 +22,7 @@ Each version module builds a self-contained jar:
 | Per-player command access | `/adminaccess grant\|remove\|list` | OP4 | 26.2 |
 | Item identity & anti-dupe | `/itemtrace <uuid> [page]` | OP4 | 26.2 |
 | Admin item give/remove | `/adminitem give\|remove <player> <item> [count]` | OP4 | 26.2 |
-| Container audit | `/containertrace <x> <y> <z>` | OP4 | 26.2 |
+| Container audit | `/containertrace <x> <y> <z> [dimension]` | OP4 | 26.2 |
 
 - `/invsee` opens a 36-slot vanilla chest GUI backed by the target's real
   inventory; with `edit` (or `invsee_edit_mode` in config) it is writable and
@@ -47,6 +47,9 @@ can connect and normal stacking, splitting, and merging are unaffected.
 - Container audit records player sessions for chests, barrels, and shulker boxes,
   including the opener, open duration, and item quantities added or removed.
   Logs are written per container under `logs/admintools/containers/`.
+  Double chests share one log. Overlapping viewers produce one session attributed
+  to all participants; automated changes during an open session are included in
+  its net totals rather than attributed to a specific player.
 - Persistence: `config/admintools/item_ledger.json` (snapshot),
   `logs/admintools/item_ledger.jsonl` (movement events), and
   `logs/admintools/item_duplicates.jsonl` (duplicate alerts).
@@ -61,13 +64,24 @@ can connect and normal stacking, splitting, and merging are unaffected.
 |---|---|---|
 | `enable_inventory_viewer` | `true` | Toggle `/invsee` |
 | `enable_ender_chest_viewer` | `true` | Toggle `/endersee` |
-| `max_command_rate` | `10` | Reserved (currently unused) |
 | `log_actions_to_file` | `true` | Write action log |
 | `invsee_edit_mode` | `false` | Make `/invsee` writable by default |
 | `detect_creative_duplicates` | `false` | Include creative players in dupe detection |
+| `ledger_max_entries` | `5000` | Soft cap; active identities are never evicted |
 | `enable_container_audit` | `true` | Log player-opened chests, barrels, and shulker boxes |
 
 Per-player grants live in `config/admintools/permissions.json`.
+Run `/admintools reload` as OP4 to validate and apply both files without restarting.
+
+Available `/adminaccess` permission nodes:
+
+- `admintools.invsee` and `admintools.invsee.edit`
+- `admintools.endersee`
+- `admintools.itemtrace`
+- `admintools.containertrace`
+- `admintools.adminitem.give`, `admintools.adminitem.remove`, and
+  `admintools.adminitem.*`
+- `admintools.*` for every AdminTools command
 
 ## Building
 
