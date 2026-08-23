@@ -3,7 +3,7 @@
     "id": "admintools",
     "version": "${version}",
     "name": "AdminTools",
-    "description": "Server-authoritative admin tools: inventory viewer, item tracking, container audit, and x-ray heuristics.",
+    "description": "Server-authoritative admin tools for inventory inspection, item tracking, and container auditing.",
     "authors": ["echubbuck"],
     "contact": {},
     "license": "MIT",

@@ -10,7 +10,6 @@
         "PlayerItemMixin",
         "ItemEntityMixin",
         "BlockItemPlaceMixin",
-        "PlayerChunkSenderMixin",
         "ContainerOpenMixin"
     ],
     "injectors": {

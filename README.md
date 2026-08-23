@@ -1,9 +1,8 @@
 # AdminTools
 
 Server-authoritative admin tools for Minecraft: Fabric 26.2. View player
-inventories and ender chests in live vanilla GUIs, audit players with X-ray
-heuristics, manage custom roles, and track per-stack item identity to catch
-dupes.
+inventories and ender chests in live vanilla GUIs, manage custom roles, and
+track per-stack item identity to catch dupes.
 
 ## Supported versions
 
@@ -20,7 +19,6 @@ Each version module builds a self-contained jar:
 |---|---|---|---|
 | Player inventory viewer | `/invsee <player> [edit]` | OP4 | 26.2 |
 | Ender chest viewer | `/endersee <player>` | OP4 | 26.2 |
-| X-ray heuristic audit | `/xrayaudit <player>` | OP4 | 26.2 |
 | Role/permission management | `/adminrole grant\|remove\|assign` | OP2 | 26.2 |
 | Item identity & anti-dupe | `/itemtrace <uuid>` | OP4 | 26.2 |
 | Admin item give/remove | `/adminitem give\|remove <player> <item> [count]` | OP4 | 26.2 |
@@ -29,8 +27,6 @@ Each version module builds a self-contained jar:
 - `/invsee` opens a 36-slot vanilla chest GUI backed by the target's real
   inventory; with `edit` (or `invsee_edit_mode` in config) it is writable.
 - `/endersee` opens a 27-slot single-chest GUI, read-only.
-- `/xrayaudit` reports dimension-specific heuristic signals: mining speed,
-  torch ratio, ore exposure, and chunk-update patterns.
 - `/adminrole` manages JSON-defined roles (`config/admintools/roles.json`),
   hot-reloadable.
 
@@ -62,7 +58,6 @@ can connect and normal stacking, splitting, and merging are unaffected.
 |---|---|---|
 | `enable_inventory_viewer` | `true` | Toggle `/invsee` |
 | `enable_ender_chest_viewer` | `true` | Toggle `/endersee` |
-| `enable_xray_audit` | `true` | Toggle `/xrayaudit` |
 | `max_command_rate` | `10` | Reserved (currently unused) |
 | `log_actions_to_file` | `true` | Write action log |
 | `invsee_edit_mode` | `false` | Make `/invsee` writable by default |
@@ -96,7 +91,7 @@ Manual server testing (26.2):
 Server data goes to `version-26-2/run/`. AdminTools is server-only; clients do
 not need the AdminTools jar, Fabric Loader, or Fabric API to connect. The
 viewer GUIs use vanilla menu types and are rendered by the vanilla client.
-Make yourself OP in the server console: OP4 for viewers/audit/trace, OP2 for
+Make yourself OP in the server console: OP4 for viewers/trace/item commands, OP2 for
 `/adminrole`.
 
 ## Development notes

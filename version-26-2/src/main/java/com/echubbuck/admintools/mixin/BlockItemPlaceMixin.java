@@ -25,8 +25,5 @@ public abstract class BlockItemPlaceMixin {
         if (AdminToolsMod.getItemEventSink() != null) {
             AdminToolsMod.getItemEventSink().onPlace(player, hand);
         }
-        if (AdminToolsMod.getHeuristicTracker() != null && state != null) {
-            AdminToolsMod.getHeuristicTracker().recordPlace(player.getUUID(), state.getBlock());
-        }
     }
 }

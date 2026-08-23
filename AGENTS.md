@@ -22,12 +22,11 @@ build currently targets one supported version:
 |---|---|---|
 | Player inventory viewer | `/invsee <player> [edit]` | 36-slot vanilla chest GUI backed by the target's real `Inventory`; `edit` makes it writable |
 | Ender chest viewer | `/endersee <player>` | 27-slot single-chest GUI, read-only |
-| X-ray heuristic audit | `/xrayaudit <player>` | Dimension-specific rules; tracks mining speed, torch ratio, ore exposure, chunk updates |
 | Role/Permission management | `/adminrole grant\|remove\|assign` | JSON config (`config/admintools/roles.json`), hot-reloadable |
 | Item identity & anti-dupe (26.2) | `/itemtrace <uuid>` | Per-stack persistent identity (`admintools:uid` inside vanilla custom data), lineage, movement log, duplicate detection |
 | Admin item give/remove (26.2) | `/adminitem give\|remove` | Grants items with `ADMIN_GIVE` identity / removes items with `ADMIN_REMOVE` |
 
-Gating: viewer/audit/trace/item commands require OP4
+Gating: viewer/trace/item commands require OP4
 (`Permissions.COMMANDS_GAMEMASTER`); `/adminrole` requires OP2
 (`Permissions.COMMANDS_ADMIN`). Viewers are additionally toggleable via config
 (`enable_inventory_viewer`, etc.).
@@ -109,10 +108,10 @@ Gating: viewer/audit/trace/item commands require OP4
 - Listens on `localhost:25565`; server data (world/logs/config) goes to
   `version-26-2/run/` (gitignored). `test-server/` is itself gitignored — a
   local-only helper.
-- The server runs commands, heuristics, and item tracking. Viewer GUIs use
+- The server runs commands and item tracking. Viewer GUIs use
   vanilla menu types, so vanilla clients can connect without AdminTools, Fabric
   Loader, or Fabric API installed.
-- Make yourself OP in the server console (`op <name>`): OP4 for viewers/audit,
+- Make yourself OP in the server console (`op <name>`): OP4 for viewers/trace/item commands,
   OP2 for `/adminrole`.
 
 ## Git workflow

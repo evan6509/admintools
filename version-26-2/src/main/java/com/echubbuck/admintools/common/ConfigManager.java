@@ -58,7 +58,6 @@ public class ConfigManager {
         JsonObject obj = new JsonObject();
         obj.addProperty("enable_inventory_viewer", true);
         obj.addProperty("enable_ender_chest_viewer", true);
-        obj.addProperty("enable_xray_audit", true);
         obj.addProperty("max_command_rate", 10);
         obj.addProperty("log_actions_to_file", true);
         obj.addProperty("invsee_edit_mode", false);
