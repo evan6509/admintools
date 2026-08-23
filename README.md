@@ -1,15 +1,14 @@
 # AdminTools
 
-Server-authoritative admin tools for Minecraft: Fabric. View player inventories
-and ender chests in live vanilla GUIs, audit players with X-ray heuristics,
-manage custom roles, and (on 26.2) track per-stack item identity to catch
+Server-authoritative admin tools for Minecraft: Fabric 26.2. View player
+inventories and ender chests in live vanilla GUIs, audit players with X-ray
+heuristics, manage custom roles, and track per-stack item identity to catch
 dupes.
 
 ## Supported versions
 
 | Module | Minecraft | Java | Fabric Loader | Fabric API |
 |---|---|---|---|---|
-| `version-1-21-11` | 1.21.11 | 21 | >= 0.16.8 | >= 0.141.4 |
 | `version-26-2` | 26.2 | 25 | >= 0.19.3 | >= 0.154.2 |
 
 Each version module builds a self-contained jar:
@@ -19,10 +18,10 @@ Each version module builds a self-contained jar:
 
 | Feature | Command | Permission | Versions |
 |---|---|---|---|
-| Player inventory viewer | `/invsee <player> [edit]` | OP4 | all |
-| Ender chest viewer | `/endersee <player>` | OP4 | all |
-| X-ray heuristic audit | `/xrayaudit <player>` | OP4 | all |
-| Role/permission management | `/adminrole grant\|remove\|assign` | OP2 | all |
+| Player inventory viewer | `/invsee <player> [edit]` | OP4 | 26.2 |
+| Ender chest viewer | `/endersee <player>` | OP4 | 26.2 |
+| X-ray heuristic audit | `/xrayaudit <player>` | OP4 | 26.2 |
+| Role/permission management | `/adminrole grant\|remove\|assign` | OP2 | 26.2 |
 | Item identity & anti-dupe | `/itemtrace <uuid>` | OP4 | 26.2 |
 | Admin item give/remove | `/adminitem give\|remove <player> <item> [count]` | OP4 | 26.2 |
 | Container audit | `/containertrace <x> <y> <z>` | OP4 | 26.2 |
@@ -77,12 +76,8 @@ Roles live in `config/admintools/roles.json`.
 Requires the Gradle wrapper (Gradle 9.5.1, Loom 1.17.14):
 
 ```bash
-./gradlew :version-1-21-11:build   # MC 1.21.11, Java 21
 ./gradlew :version-26-2:build      # MC 26.2, Java 25
 ```
-
-The 1.21.11 module cross-compiles with `--release 21`; 26.2 with
-`--release 25`.
 
 ## Testing
 

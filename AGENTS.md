@@ -2,21 +2,19 @@
 
 ## Project state
 
-Fabric mod providing server-authoritative admin tools. Two version modules in a
-multi-project Gradle build:
+Fabric mod providing server-authoritative admin tools. The multi-project Gradle
+build currently targets one supported version:
 
 | Module | Target | Build command |
 |---|---|---|
-| `version-1-21-11` | MC 1.21.11, Java 21 | `./gradlew :version-1-21-11:build` |
 | `version-26-2` | MC 26.2, Java 25 | `./gradlew :version-26-2:build` |
 
 - `build-26-2/` is a **stale standalone snapshot** (git-tracked, predates the item
   identity feature — no `ItemTraceCommand`, no mixins). Do not edit it;
   `version-26-2/` is canonical.
-- Both modules use **Mojang official mapping names** (not Yarn): `Component` not
+- The module uses **Mojang official mapping names** (not Yarn): `Component` not
   `Text`, `AbstractContainerMenu` not `Menu`, `Identifier` not `ResourceLocation`.
-- Default JDK on this machine is 25; the 1.21.11 module cross-compiles via
-  `--release 21`.
+- Default JDK on this machine is 25.
 
 ## Features
 
@@ -56,41 +54,36 @@ Gating: viewer/audit/trace/item commands require OP4
 
 ## Architecture — read before editing
 
-- **Common classes are vendored per module.** Each version module has its own copy
-  of `com.echubbuck.admintools.common.*` under its own `src/main/java`.
-  `version-26-2` does **not** depend on `:common` at all, and its copy has
-  diverged (26.2-only `Item*` classes + `detect_creative_duplicates`).
-  `version-1-21-11` declares `:common` but its identical local copy shadows it,
-  and built jars are self-contained. **Fixing a common class means editing the
-  copy in each target module** — editing `common/` alone changes nothing.
+- **Common classes are vendored in `version-26-2`.** The module owns its copy of
+  `com.echubbuck.admintools.common.*` under `src/main/java` and builds a
+  self-contained jar.
 - **No client source set, no client entrypoint.** There is no `src/client/java`
   and no `client` entrypoint in `fabric.mod.json` (`environment: "*"`). The
   viewer GUIs are vanilla `ChestMenu` subclasses (`InvSeeScreenHandler`,
   `EnderSeeScreenHandler`) opened via `SimpleMenuProvider` and rendered by the
   vanilla client screen — there are no custom `Screen` classes.
-- Per-version modules hold: commands, screen handlers, event hooks, and the
+- The version module holds: commands, screen handlers, event hooks, and the
   `AdminToolsMod` initializer (static singletons exposed via getters).
 - Permission gate via custom `PermissionManager` layered on vanilla OP levels.
 
 ## Key build details
 
-- Gradle 9.5.1 (wrapper); Loom 1.17.14 for both modules.
-- 1.21.11 uses the legacy `fabric-loom` plugin + `loom.officialMojangMappings()`;
-  26.2 uses `net.fabricmc.fabric-loom` (non-obfuscated pipeline).
-- Java: 1.21.11 → `--release 21`, 26.2 → `--release 25`.
-- Dependencies: Gson 2.10.1, Fabric Loader + Fabric API (version-specific). No
+- Gradle 9.5.1 (wrapper); Loom 1.17.14.
+- 26.2 uses `net.fabricmc.fabric-loom` (non-obfuscated pipeline) and
+  `--release 25`.
+- Dependencies: Gson 2.10.1, Fabric Loader, and Fabric API. No
   third-party mod dependencies.
 
-### API differences between 1.21.11 and 26.2 (verified against both jars)
+### 26.2 API details
 
-| Area | 1.21.11 | 26.2 |
-|---|---|---|
-| Render class | `GuiGraphics` | `GuiGraphicsExtractor` |
-| `Screen` background hook | `renderBackground(GuiGraphics, int, int, float)` | `extractBackground(GuiGraphicsExtractor, int, int, float)` |
-| `Screen` main render | `render(GuiGraphics, int, int, float)` | `extractRenderState(GuiGraphicsExtractor, int, int, float)` |
-| Textured blit pipeline | `RenderPipelines.GUI` | `RenderPipelines.GUI_TEXTURED` (both in `net.minecraft.client.renderer`) |
-| `ServerTickEvents` | `START_WORLD_TICK` / `StartWorldTick` | `START_LEVEL_TICK` / `StartLevelTick` |
-| Loader requirement | `>=0.16.8` | `>=0.19.3` |
+| Area | 26.2 |
+|---|---|
+| Render class | `GuiGraphicsExtractor` |
+| `Screen` background hook | `extractBackground(GuiGraphicsExtractor, int, int, float)` |
+| `Screen` main render | `extractRenderState(GuiGraphicsExtractor, int, int, float)` |
+| Textured blit pipeline | `RenderPipelines.GUI_TEXTURED` in `net.minecraft.client.renderer` |
+| `ServerTickEvents` | `START_LEVEL_TICK` / `StartLevelTick` |
+| Loader requirement | `>=0.19.3` |
 
 ## Tests
 
@@ -98,7 +91,6 @@ Gating: viewer/audit/trace/item commands require OP4
   plain `main`-class runner (`ItemLogicTestRunner`), **not JUnit**.
 - `./gradlew :version-26-2:runGametest` — `@GameTest` methods, which live in
   `src/main/java/com/echubbuck/admintools/test/` (not `src/test`).
-- 1.21.11 has no tests.
 
 ## Manual testing (26.2)
 
