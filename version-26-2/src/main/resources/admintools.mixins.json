@@ -4,6 +4,8 @@
     "package": "com.echubbuck.admintools.mixin",
     "compatibilityLevel": "JAVA_21",
     "mixins": [
+        "DataComponentPatchNetworkMixin",
+        "RegistrySyncCompatibilityMixin",
         "ItemStackMatchingMixin",
         "PlayerItemMixin",
         "ItemEntityMixin",

@@ -29,7 +29,7 @@ public class ItemIdentityManager {
         if (stack.isEmpty()) return null;
         UUID uid = UUID.randomUUID();
         ItemUidComponent.set(stack, uid);
-        ItemIdentity identity = ItemIdentity.create(source, creator);
+        ItemIdentity identity = ItemIdentity.create(uid, source, creator);
         String ownerKey = ownerKey(ownerName);
         ledger.registerIdentity(identity, itemId(stack), stack.getCount(), ownerName, ownerKey);
         if (ownerName != null) {

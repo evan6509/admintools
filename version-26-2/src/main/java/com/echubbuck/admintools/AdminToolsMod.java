@@ -38,8 +38,9 @@ public class AdminToolsMod implements ModInitializer {
         heuristicEngine = new HeuristicEngine();
         heuristicTracker = new HeuristicTracker(heuristicEngine);
 
-        // Force data-component registration (static initializer of ItemUidComponent).
-        var uidType = ItemUidComponent.TYPE;
+        // Register the legacy UID component so older saved stacks can migrate
+        // into vanilla custom_data when they are first observed.
+        var legacyUidType = ItemUidComponent.LEGACY_TYPE;
 
         itemLedger = new ItemLedger();
         itemLedger.setMaxEntries(configManager.getInt("ledger_max_entries", 5000));

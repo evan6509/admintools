@@ -59,6 +59,10 @@ public class ItemLogicTestRunner {
 
             ItemIdentity noCreator = ItemIdentity.create("BREAK", null);
             isNull(noCreator.creatorUuid(), "null creator allowed");
+
+            UUID suppliedUid = UUID.randomUUID();
+            ItemIdentity supplied = ItemIdentity.create(suppliedUid, "TEST", creator);
+            eq(suppliedUid, supplied.uid(), "supplied uid preserved");
         }
     }
 

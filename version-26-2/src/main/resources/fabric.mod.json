@@ -10,7 +10,8 @@
     "icon": "assets/admintools/icon.png",
     "environment": "server",
     "entrypoints": {
-        "main": ["com.echubbuck.admintools.AdminToolsMod"]
+        "main": ["com.echubbuck.admintools.AdminToolsMod"],
+        "fabric-gametest": ["com.echubbuck.admintools.test.AdminToolsGameTests"]
     },
     "mixins": [
         "admintools.mixins.json"

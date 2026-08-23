@@ -24,7 +24,7 @@ build currently targets one supported version:
 | Ender chest viewer | `/endersee <player>` | 27-slot single-chest GUI, read-only |
 | X-ray heuristic audit | `/xrayaudit <player>` | Dimension-specific rules; tracks mining speed, torch ratio, ore exposure, chunk updates |
 | Role/Permission management | `/adminrole grant\|remove\|assign` | JSON config (`config/admintools/roles.json`), hot-reloadable |
-| Item identity & anti-dupe (26.2) | `/itemtrace <uuid>` | Per-stack persistent identity (`admintools:uid` data component), lineage, movement log, duplicate detection |
+| Item identity & anti-dupe (26.2) | `/itemtrace <uuid>` | Per-stack persistent identity (`admintools:uid` inside vanilla custom data), lineage, movement log, duplicate detection |
 | Admin item give/remove (26.2) | `/adminitem give\|remove` | Grants items with `ADMIN_GIVE` identity / removes items with `ADMIN_REMOVE` |
 
 Gating: viewer/audit/trace/item commands require OP4
@@ -34,9 +34,14 @@ Gating: viewer/audit/trace/item commands require OP4
 
 ### Item identity system (26.2 only)
 
-- Every stack gets a persistent `admintools:uid` data component on first
-  observation (not re-generated on copy; survives moves/restarts). The component
-  has only a `persistent` codec (no network codec), so it never syncs to clients.
+- Every stack gets a persistent `admintools:uid` key inside vanilla
+  `minecraft:custom_data` on first observation (not re-generated on copy;
+  survives moves/restarts). `DataComponentPatchNetworkMixin` strips the key
+  from outbound item packets, so it never syncs to clients. The legacy custom
+  component remains registered only to migrate items saved by older builds;
+  `RegistrySyncCompatibilityMixin` prevents that legacy-only entry from making
+  Fabric API reject vanilla clients. Other mods' custom component entries still
+  trigger Fabric's normal client compatibility check.
 - `ItemStackMatchingMixin` exempts the uid from `isSameItemSameComponents` so
   vanilla stacking/splitting/merging is unaffected.
 - Split stacks (same uid twice in one inventory) are re-identified same-tick with
@@ -47,8 +52,10 @@ Gating: viewer/audit/trace/item commands require OP4
 - `ItemDuplicateDetector` flags the same uid in ≥2 independent locations (player
   inventories/ender chests) — alert-only, no auto-removal; creative excluded by
   `detect_creative_duplicates` config.
-- Mixins (26.2): `ItemStackMatchingMixin`, `PlayerItemMixin` (pickup/drop),
-  `ItemEntityMixin` (spawn), `BlockItemPlaceMixin` (place).
+- Mixins (26.2): `DataComponentPatchNetworkMixin` (outbound UID filtering),
+  `RegistrySyncCompatibilityMixin` (legacy-only registry compatibility),
+  `ItemStackMatchingMixin`, `PlayerItemMixin` (pickup/drop), `ItemEntityMixin`
+  (spawn), `BlockItemPlaceMixin` (place).
   `admintools.mixins.json` is `required: true` — a missed injection crashes the
   game, it does not just log.
 
@@ -58,7 +65,7 @@ Gating: viewer/audit/trace/item commands require OP4
   `com.echubbuck.admintools.common.*` under `src/main/java` and builds a
   self-contained jar.
 - **No client source set, no client entrypoint.** There is no `src/client/java`
-  and no `client` entrypoint in `fabric.mod.json` (`environment: "*"`). The
+  and no `client` entrypoint in `fabric.mod.json` (`environment: "server"`). The
   viewer GUIs are vanilla `ChestMenu` subclasses (`InvSeeScreenHandler`,
   `EnderSeeScreenHandler`) opened via `SimpleMenuProvider` and rendered by the
   vanilla client screen — there are no custom `Screen` classes.
@@ -102,10 +109,9 @@ Gating: viewer/audit/trace/item commands require OP4
 - Listens on `localhost:25565`; server data (world/logs/config) goes to
   `version-26-2/run/` (gitignored). `test-server/` is itself gitignored — a
   local-only helper.
-- The server runs commands + heuristics regardless; the **viewer GUIs** are
-  client-rendered, so the client needs
-  `version-26-2/build/libs/admintools-26.2-1.0.0.jar` plus the Fabric API jar in
-  its `mods/` folder.
+- The server runs commands, heuristics, and item tracking. Viewer GUIs use
+  vanilla menu types, so vanilla clients can connect without AdminTools, Fabric
+  Loader, or Fabric API installed.
 - Make yourself OP in the server console (`op <name>`): OP4 for viewers/audit,
   OP2 for `/adminrole`.
 

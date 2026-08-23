@@ -16,6 +16,7 @@ loom {
         gametest {
             // Runs the @GameTest methods in com.echubbuck.admintools.test.
             server()
+            vmArg "-Dfabric-api.gametest"
         }
     }
 }

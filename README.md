@@ -36,10 +36,10 @@ Each version module builds a self-contained jar:
 
 ### Item identity (26.2)
 
-Every stack is assigned a persistent `admintools:uid` data component on first
-observation. The component is server-side only (persistent codec, no network
-codec) and is exempted from vanilla item matching, so normal stacking,
-splitting, and merging are unaffected.
+Every stack is assigned a persistent `admintools:uid` key inside vanilla
+`minecraft:custom_data` on first observation. The key is removed from outbound
+item packets and ignored during server-side item matching, so vanilla clients
+can connect and normal stacking, splitting, and merging are unaffected.
 
 - Splits record `SPLIT` lineage, merges record `MERGE` (absorbed parent), and
   player-to-player moves are correlated as `TRANSFER`.
