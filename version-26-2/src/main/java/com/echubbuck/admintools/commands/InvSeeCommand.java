@@ -15,7 +15,8 @@ public class InvSeeCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("invsee")
-                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.INVSEE))
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.INVSEE)
+                        || AdminToolsMod.hasAccess(src, PermissionNodes.INVSEE_EDIT))
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(ctx -> execute(ctx.getSource(), EntityArgument.getPlayer(ctx, "player"), false))
                         .then(Commands.literal("edit")
