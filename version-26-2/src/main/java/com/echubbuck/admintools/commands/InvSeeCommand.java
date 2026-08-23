@@ -23,7 +23,7 @@ public class InvSeeCommand {
                                 .executes(ctx -> execute(ctx.getSource(), EntityArgument.getPlayer(ctx, "player"), true)))));
     }
 
-    private static int execute(CommandSourceStack source, ServerPlayer target, boolean editable) {
+    private static int execute(CommandSourceStack source, ServerPlayer target, boolean requestedEdit) {
         ServerPlayer admin = source.getPlayer();
         if (admin == null) {
             source.sendFailure(Component.literal("This command must be run by a player."));
@@ -40,6 +40,9 @@ public class InvSeeCommand {
             return 0;
         }
 
+        boolean editable = requestedEdit
+                || (AdminToolsMod.getConfigManager().getBoolean("invsee_edit_mode", false)
+                && AdminToolsMod.hasAccess(source, PermissionNodes.INVSEE_EDIT));
         String suffix = editable ? " (editing)" : "";
         admin.openMenu(new SimpleMenuProvider(
                 (syncId, inv, player) -> new InvSeeScreenHandler(syncId, inv, target, editable),

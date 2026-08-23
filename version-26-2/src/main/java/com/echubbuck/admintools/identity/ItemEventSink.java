@@ -41,6 +41,7 @@ public class ItemEventSink {
         if (stack.isEmpty() || count <= 0) return;
         String name = target.getScoreboardName();
         UUID uid = identityManager.ensureIdentity(stack, "ADMIN_GIVE", target.getUUID(), name);
+        if (movementTracker != null) movementTracker.noteAdminMove(uid.toString());
         String eventActor = actor == null ? name : actor;
         identityManager.ledger().updateCount(uid.toString(), stack.getCount());
         identityManager.ledger().setOwnerLocation(uid.toString(), name, ItemIdentityManager.ownerKey(name));

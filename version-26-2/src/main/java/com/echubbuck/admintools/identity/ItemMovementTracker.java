@@ -31,6 +31,8 @@ public class ItemMovementTracker {
     /** Uids the event sink already logged as DROP/PICKUP -> tick stamp, to avoid double logging. */
     private final Map<String, Integer> sinkDrops = new HashMap<>();
     private final Map<String, Integer> sinkPickups = new HashMap<>();
+    /** Uids changed through editable invsee and already logged with the admin actor. */
+    private final Map<String, Integer> adminMoves = new HashMap<>();
     /** Uids seen disappearing into an open container -> tick stamp, for withdrawal attribution. */
     private final Map<String, Integer> containerDeposits = new HashMap<>();
     private int tickCounter = 0;
@@ -61,6 +63,10 @@ public class ItemMovementTracker {
     /** The sink logged a PICKUP for this uid; the diff should not log UNKNOWN arrival. */
     public void noteSinkPickup(String uid) {
         sinkPickups.put(uid, tickCounter);
+    }
+
+    public void noteAdminMove(String uid) {
+        adminMoves.put(uid, tickCounter);
     }
 
     // --- Lifecycle ---
@@ -137,6 +143,7 @@ public class ItemMovementTracker {
     private void pruneMemories() {
         pruneMemory(sinkDrops, SINK_MEMORY_TICKS * 8);
         pruneMemory(sinkPickups, SINK_MEMORY_TICKS * 8);
+        pruneMemory(adminMoves, SINK_MEMORY_TICKS * 8);
         pruneMemory(containerDeposits, CONTAINER_MEMORY_TICKS);
     }
 
@@ -174,13 +181,14 @@ public class ItemMovementTracker {
             int now = e.getValue();
             int before = prev.getOrDefault(uid, -1);
             if (before == -1) {
-                pd.deltas.put(uid, now); // new identity (created by a hook or first observation)
+                boolean adminMove = sinkRecorded(adminMoves, uid);
+                if (!adminMove) pd.deltas.put(uid, now);
                 identityManager.ledger().setOwnerLocation(uid, name, ItemIdentityManager.ownerKey(name));
                 boolean containerEventLogged = containerAuditTracker != null
                         && containerAuditTracker.consumeRecentlyLogged(uid);
                 boolean auditingContainer = containerAuditTracker != null
                         && containerAuditTracker.hasActiveSession(puuid);
-                if (containerEventLogged || auditingContainer) {
+                if (adminMove || containerEventLogged || auditingContainer) {
                     // The open container session will attribute this arrival precisely on close.
                 } else if (withdrawnFromContainer(uid)) {
                     // This uid was previously deposited into a container by someone; attribute the return.
@@ -195,7 +203,7 @@ public class ItemMovementTracker {
                             ItemIdentityManager.ownerKey(name)));
                 }
             } else if (before != now) {
-                pd.deltas.put(uid, now - before);
+                if (!sinkRecorded(adminMoves, uid)) pd.deltas.put(uid, now - before);
                 identityManager.ledger().updateCount(uid, now);
             }
         }
@@ -224,11 +232,14 @@ public class ItemMovementTracker {
             }
             if (!merged) {
                 // Identity left this player (dropped / moved / consumed / transferred).
-                pd.deltas.put(uid, -lost);
+                boolean adminMove = sinkRecorded(adminMoves, uid);
+                if (!adminMove) pd.deltas.put(uid, -lost);
                 pd.item.putIfAbsent(uid, item == null ? "" : item);
                 boolean containerEventLogged = containerAuditTracker != null
                         && containerAuditTracker.consumeRecentlyLogged(uid);
-                if (sinkRecorded(sinkDrops, uid)) {
+                if (adminMove) {
+                    pd.externallyLoggedLosses.add(uid);
+                } else if (sinkRecorded(sinkDrops, uid)) {
                     // Exact drop already recorded by ItemEventSink.onDrop; sync location only.
                     identityManager.ledger().setOwnerLocation(uid, "ground", null);
                     pd.externallyLoggedLosses.add(uid);

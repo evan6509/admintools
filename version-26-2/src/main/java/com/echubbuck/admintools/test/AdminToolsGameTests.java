@@ -4,6 +4,7 @@ import com.echubbuck.admintools.AdminToolsMod;
 import com.echubbuck.admintools.common.ItemAction;
 import com.echubbuck.admintools.common.ItemLedgerEntry;
 import com.echubbuck.admintools.common.ItemMovementEvent;
+import com.echubbuck.admintools.gui.InvSeeScreenHandler;
 import com.echubbuck.admintools.identity.ItemUidComponent;
 import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -16,6 +17,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -203,6 +206,52 @@ public class AdminToolsGameTests {
             helper.succeed();
         } else {
             helper.fail("tagged stack with missing ledger entry was not recovered");
+        }
+    }
+
+    @GameTest
+    public void editableInvseeAttributesAdminMove(GameTestHelper helper) {
+        ServerPlayer admin = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ServerPlayer target = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ItemStack stack = new ItemStack(Items.DIAMOND, 6);
+        target.getInventory().setItem(0, stack);
+        UUID uid = AdminToolsMod.getItemIdentityManager().ensureIdentity(
+                stack, "TEST", target.getUUID(), target.getScoreboardName());
+        InvSeeScreenHandler menu = new InvSeeScreenHandler(1, admin.getInventory(), target, true);
+
+        menu.clicked(0, 0, ContainerInput.PICKUP, admin);
+
+        boolean attributed = false;
+        for (ItemMovementEvent event : AdminToolsMod.getItemLedger().eventsByUid(uid.toString())) {
+            if (event.action() == ItemAction.ADMIN_MOVE
+                    && admin.getScoreboardName().equals(event.actor())
+                    && target.getScoreboardName().equals(event.from())
+                    && admin.getScoreboardName().equals(event.to())
+                    && event.count() == 6) {
+                attributed = true;
+                break;
+            }
+        }
+        if (target.getInventory().getItem(0).isEmpty() && attributed) {
+            helper.succeed();
+        } else {
+            helper.fail("editable invsee did not attribute the item move to the admin");
+        }
+    }
+
+    @GameTest
+    public void readOnlyInvseeRejectsPickup(GameTestHelper helper) {
+        ServerPlayer admin = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ServerPlayer target = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        target.getInventory().setItem(0, new ItemStack(Items.EMERALD, 3));
+        InvSeeScreenHandler menu = new InvSeeScreenHandler(1, admin.getInventory(), target, false);
+
+        menu.clicked(0, 0, ContainerInput.PICKUP, admin);
+
+        if (target.getInventory().getItem(0).getCount() == 3 && menu.getCarried().isEmpty()) {
+            helper.succeed();
+        } else {
+            helper.fail("read-only invsee allowed an item pickup");
         }
     }
 

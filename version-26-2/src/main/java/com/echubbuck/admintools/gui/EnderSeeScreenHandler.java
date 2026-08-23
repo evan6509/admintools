@@ -44,6 +44,6 @@ public class EnderSeeScreenHandler extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        return target.isAlive();
+        return target.isAlive() && !target.hasDisconnected();
     }
 }

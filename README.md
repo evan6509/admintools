@@ -20,12 +20,13 @@ Each version module builds a self-contained jar:
 | Player inventory viewer | `/invsee <player> [edit]` | OP4 | 26.2 |
 | Ender chest viewer | `/endersee <player>` | OP4 | 26.2 |
 | Per-player command access | `/adminaccess grant\|remove\|list` | OP4 | 26.2 |
-| Item identity & anti-dupe | `/itemtrace <uuid>` | OP4 | 26.2 |
+| Item identity & anti-dupe | `/itemtrace <uuid> [page]` | OP4 | 26.2 |
 | Admin item give/remove | `/adminitem give\|remove <player> <item> [count]` | OP4 | 26.2 |
 | Container audit | `/containertrace <x> <y> <z>` | OP4 | 26.2 |
 
 - `/invsee` opens a 36-slot vanilla chest GUI backed by the target's real
-  inventory; with `edit` (or `invsee_edit_mode` in config) it is writable.
+  inventory; with `edit` (or `invsee_edit_mode` in config) it is writable and
+  each item move is attributed to the administrator in the audit log.
 - `/endersee` opens a 27-slot single-chest GUI, read-only.
 - `/adminaccess` grants AdminTools command permissions directly to player UUIDs;
   OP4 always retains full access.
@@ -49,6 +50,8 @@ can connect and normal stacking, splitting, and merging are unaffected.
 - Persistence: `config/admintools/item_ledger.json` (snapshot),
   `logs/admintools/item_ledger.jsonl` (movement events), and
   `logs/admintools/item_duplicates.jsonl` (duplicate alerts).
+- `/itemtrace` reads the durable movement log and displays it in newest-first,
+  ten-event pages.
 
 ## Configuration
 

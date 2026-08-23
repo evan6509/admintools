@@ -5,6 +5,7 @@ import com.echubbuck.admintools.common.PermissionNodes;
 import com.echubbuck.admintools.common.ItemLedgerEntry;
 import com.echubbuck.admintools.common.ItemMovementEvent;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -17,15 +18,19 @@ import java.util.UUID;
 
 public class ItemTraceCommand {
     private static final SimpleDateFormat FMT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final int PAGE_SIZE = 10;
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("itemtrace")
                 .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.ITEMTRACE))
                 .then(Commands.argument("uid", StringArgumentType.word())
-                        .executes(ctx -> execute(ctx.getSource(), StringArgumentType.getString(ctx, "uid")))));
+                        .executes(ctx -> execute(ctx.getSource(), StringArgumentType.getString(ctx, "uid"), 1))
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1, 100))
+                                .executes(ctx -> execute(ctx.getSource(), StringArgumentType.getString(ctx, "uid"),
+                                        IntegerArgumentType.getInteger(ctx, "page"))))));
     }
 
-    private static int execute(CommandSourceStack source, String uidArg) {
+    private static int execute(CommandSourceStack source, String uidArg, int page) {
         UUID uid;
         try {
             uid = UUID.fromString(uidArg);
@@ -50,18 +55,17 @@ public class ItemTraceCommand {
             source.sendSuccess(() -> Component.literal("§eLineage parents: §f" + String.join(", ", entry.parents)), false);
         }
 
-        List<ItemMovementEvent> events = AdminToolsMod.getItemLedger().eventsByUid(uidStr);
-        source.sendSuccess(() -> Component.literal("§eRecent movements: §7" + events.size()), false);
-        for (ItemMovementEvent e : events) {
+        var history = AdminToolsMod.getItemLedger().eventPageByUid(uidStr, page, PAGE_SIZE);
+        int pages = Math.max(1, (history.total() + PAGE_SIZE - 1) / PAGE_SIZE);
+        final int requestedPage = page;
+        source.sendSuccess(() -> Component.literal("§eMovement history: §7" + history.total()
+                + " events, page " + requestedPage + "/" + pages), false);
+        for (ItemMovementEvent e : history.events()) {
             source.sendSuccess(() -> Component.literal("  §7" + FMT.format(new Date(e.timestamp())) + " §f" + e.action()
                     + " §7x" + e.count() + " " + (e.from() != null ? e.from() : "-") + " -> " + (e.to() != null ? e.to() : "-")), false);
         }
 
-        int dup = 0;
-        for (ItemMovementEvent d : AdminToolsMod.getItemLedger().duplicateAlerts()) {
-            if (uidStr.equals(d.uid())) dup++;
-        }
-        final int dupFinal = dup;
+        final int dupFinal = AdminToolsMod.getItemLedger().duplicateAlertCount(uidStr);
         source.sendSuccess(() -> Component.literal("§eDuplicate alerts: §f" + dupFinal), false);
         return 1;
     }

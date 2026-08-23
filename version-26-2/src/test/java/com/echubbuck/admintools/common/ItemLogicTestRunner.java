@@ -116,6 +116,20 @@ public class ItemLogicTestRunner {
             eq(2, ledger.eventsByItem("minecraft:iron_ingot").size(), "events by item");
             eq(1, ledger.duplicateAlerts().size(), "duplicate alerts");
 
+            String pagedUid = UUID.randomUUID().toString();
+            for (int i = 1; i <= 15; i++) {
+                ledger.recordEvent(ItemMovementEvent.of(pagedUid, ItemAction.UNKNOWN,
+                        "minecraft:stone", i, "Alice", "a", "b", "player:Alice"));
+            }
+            ItemLedger.EventPage firstPage = ledger.eventPageByUid(pagedUid, 1, 10);
+            eq(15, firstPage.total(), "persistent history total");
+            eq(10, firstPage.events().size(), "persistent first page size");
+            eq(15, firstPage.events().getFirst().count(), "persistent history newest first");
+            ItemLedger.EventPage secondPage = ledger.eventPageByUid(pagedUid, 2, 10);
+            eq(5, secondPage.events().size(), "persistent second page size");
+            eq(5, secondPage.events().getFirst().count(), "persistent second page newest");
+            eq(1, ledger.duplicateAlertCount(uid2), "persistent duplicate count");
+
             // missing entry
             isNull(ledger.entry(UUID.randomUUID().toString()), "missing entry is null");
             isTrue(ledger.allEntries().size() >= 1, "allEntries non-empty");

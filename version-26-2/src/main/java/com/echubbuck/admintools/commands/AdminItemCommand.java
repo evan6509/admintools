@@ -56,21 +56,22 @@ public class AdminItemCommand {
         }
 
         var inventory = target.getInventory();
+        ItemStack template = input.createItemStack(1);
         int[] beforeCounts = new int[inventory.getContainerSize()];
         for (int i = 0; i < beforeCounts.length; i++) {
             ItemStack existing = inventory.getItem(i);
-            if (!existing.isEmpty() && existing.getItem() == input.item().value()) {
+            if (matchesInput(existing, input, template)) {
                 beforeCounts[i] = existing.getCount();
             }
         }
 
         String itemId = AdminToolsMod.getItemIdentityManager().itemId(stack);
         String itemName = stack.getItemName().getString();
-        boolean added = target.addItem(stack);
+        target.addItem(stack);
         int delivered = 0;
         for (int i = 0; i < beforeCounts.length; i++) {
             ItemStack output = inventory.getItem(i);
-            if (output.isEmpty() || output.getItem() != input.item().value()) continue;
+            if (!matchesInput(output, input, template)) continue;
             int delta = output.getCount() - beforeCounts[i];
             if (delta > 0) {
                 AdminToolsMod.getItemEventSink().onDeliveredGive(
@@ -88,14 +89,17 @@ public class AdminItemCommand {
                     target, stack, undelivered, ctx.getSource().getTextName());
         }
 
-        if (!added) {
+        if (delivered == 0) {
             ctx.getSource().sendFailure(Component.literal(target.getScoreboardName() + "'s inventory is full."));
             return 0;
         }
-        ctx.getSource().sendSuccess(() -> Component.literal("§aGave " + count + "x " + itemName
-                + " to " + target.getScoreboardName()), true);
+        final int deliveredFinal = delivered;
+        final int undeliveredFinal = count - delivered;
+        ctx.getSource().sendSuccess(() -> Component.literal("§aGave " + deliveredFinal + "x " + itemName
+                + " to " + target.getScoreboardName()
+                + (undeliveredFinal > 0 ? " §e(" + undeliveredFinal + " could not be delivered)" : "")), true);
         AdminToolsMod.getActionLogger().log(ctx.getSource().getTextName(), "ADMIN_ITEM_GIVE", target.getScoreboardName(),
-                count + "x " + itemId);
+                deliveredFinal + "x " + itemId + (undeliveredFinal > 0 ? ", undelivered=" + undeliveredFinal : ""));
         return 1;
     }
 
@@ -103,25 +107,32 @@ public class AdminItemCommand {
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
         ItemInput input = ItemArgument.getItem(ctx, "item");
         var item = input.item().value();
+        ItemStack template = input.createItemStack(1);
         int remaining = count;
         int removed = 0;
 
         var inv = target.getInventory();
         for (int i = 0; i < inv.getContainerSize() && remaining > 0; i++) {
             ItemStack s = inv.getItem(i);
-            if (s.isEmpty() || s.getItem() != item) continue;
+            if (!matchesInput(s, input, template)) continue;
             int take = Math.min(remaining, s.getCount());
-            var uid = AdminToolsMod.getItemIdentityManager().getIdentity(s);
-            String itemId = AdminToolsMod.getItemIdentityManager().itemId(s);
-            inv.removeItem(i, take);
+            var originalUid = AdminToolsMod.getItemIdentityManager().getIdentity(s);
+            ItemStack removedStack = inv.removeItem(i, take);
+            if (removedStack.isEmpty()) continue;
+            var uid = AdminToolsMod.getItemIdentityManager().ensureIdentity(
+                    removedStack, "ADMIN_REMOVE", target.getUUID(), target.getScoreboardName());
+            String itemId = AdminToolsMod.getItemIdentityManager().itemId(removedStack);
             if (uid != null) {
                 ItemStack remainingStack = inv.getItem(i);
-                if (remainingStack.isEmpty()) {
-                    AdminToolsMod.getItemLedger().setStatus(uid.toString(), "REMOVED");
-                    AdminToolsMod.getItemLedger().setOwnerLocation(uid.toString(), target.getScoreboardName(), "removed");
-                } else {
-                    AdminToolsMod.getItemLedger().updateCount(uid.toString(), remainingStack.getCount());
+                AdminToolsMod.getItemLedger().setStatus(uid.toString(), "REMOVED");
+                AdminToolsMod.getItemLedger().setOwnerLocation(uid.toString(), target.getScoreboardName(), "removed");
+                if (originalUid != null) {
+                    AdminToolsMod.getItemMovementTracker().noteAdminMove(originalUid.toString());
+                    if (!remainingStack.isEmpty()) {
+                        AdminToolsMod.getItemLedger().updateCount(originalUid.toString(), remainingStack.getCount());
+                    }
                 }
+                AdminToolsMod.getItemMovementTracker().noteAdminMove(uid.toString());
                 AdminToolsMod.getItemLedger().recordEvent(ItemMovementEvent.of(
                         uid.toString(), ItemAction.ADMIN_REMOVE, itemId,
                         take, ctx.getSource().getTextName(), target.getScoreboardName(), "removed", "removed"));
@@ -130,11 +141,24 @@ public class AdminItemCommand {
             remaining -= take;
         }
 
+        if (removed == 0) {
+            ctx.getSource().sendFailure(Component.literal("No matching items were found in "
+                    + target.getScoreboardName() + "'s inventory."));
+            return 0;
+        }
         final int removedFinal = removed;
-        ctx.getSource().sendSuccess(() -> Component.literal("§aRemoved " + removedFinal + "x from " + target.getScoreboardName()
-                + " (§7requested " + count + "§a)"), true);
+        final int missingFinal = count - removed;
+        ctx.getSource().sendSuccess(() -> Component.literal("§aRemoved " + removedFinal + "x from "
+                + target.getScoreboardName()
+                + (missingFinal > 0 ? " §e(" + missingFinal + " requested items were not found)" : "")), true);
         AdminToolsMod.getActionLogger().log(ctx.getSource().getTextName(), "ADMIN_ITEM_REMOVE", target.getScoreboardName(),
                 removedFinal + "x " + AdminToolsMod.getItemIdentityManager().itemId(new ItemStack(item)));
         return 1;
+    }
+
+    private static boolean matchesInput(ItemStack stack, ItemInput input, ItemStack template) {
+        if (stack == null || stack.isEmpty() || stack.getItem() != input.item().value()) return false;
+        if (input.components().isEmpty()) return true;
+        return ItemStack.isSameItemSameComponents(stack, template);
     }
 }
