@@ -119,6 +119,29 @@ public class ItemLogicTestRunner {
             // missing entry
             isNull(ledger.entry(UUID.randomUUID().toString()), "missing entry is null");
             isTrue(ledger.allEntries().size() >= 1, "allEntries non-empty");
+
+            // The configured cap is soft for active identities, which must remain traceable.
+            ItemLedger capped = new ItemLedger(
+                    tmp.resolve("capped.json"),
+                    tmp.resolve("capped-events.jsonl"),
+                    tmp.resolve("capped-duplicates.jsonl"));
+            capped.setMaxEntries(100);
+            String terminalUid = null;
+            for (int i = 0; i < 101; i++) {
+                ItemIdentity active = ItemIdentity.create("TEST", null);
+                capped.registerIdentity(active, "minecraft:stone", 1, "Alice", "player:Alice");
+                if (i == 0) terminalUid = active.uidString();
+            }
+            capped.save();
+            eq(101, capped.allEntries().size(), "active identities survive soft cap");
+            capped.setStatus(terminalUid, "REMOVED");
+            capped.save();
+            eq(100, capped.allEntries().size(), "terminal identity pruned first");
+            isNull(capped.entry(terminalUid), "terminal identity evicted");
+
+            ledger.close();
+            reloaded.close();
+            capped.close();
         }
     }
 

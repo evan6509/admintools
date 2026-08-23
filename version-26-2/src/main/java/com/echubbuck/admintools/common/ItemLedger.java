@@ -198,7 +198,14 @@ public class ItemLedger {
         dirty = false;
         try {
             Files.createDirectories(configPath.getParent());
-            Files.writeString(configPath, gson.toJson(entries));
+            Path temporary = configPath.resolveSibling(configPath.getFileName() + ".tmp");
+            Files.writeString(temporary, gson.toJson(entries));
+            try {
+                Files.move(temporary, configPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temporary, configPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             System.err.println("[AdminTools] Failed to save item ledger: " + e.getMessage());
             dirty = true;
@@ -221,34 +228,31 @@ public class ItemLedger {
 
     /**
      * Caps the ledger at {@code maxEntries} so memory and the snapshot file stay
-     * bounded. Terminal entries (removed/merged/consumed/...) are evicted oldest
-     * first, then active entries by lastSeen.
+     * bounded when possible. Only terminal entries are safe to evict: deleting an
+     * active entry would leave a tagged in-world stack permanently untraceable.
      */
     private void pruneIfNeeded() {
         int over = entries.size() - maxEntries;
         if (over <= 0) return;
         List<ItemLedgerEntry> all = new ArrayList<>(entries.values());
         List<ItemLedgerEntry> terminal = new ArrayList<>();
-        List<ItemLedgerEntry> active = new ArrayList<>();
         for (ItemLedgerEntry e : all) {
-            (TERMINAL_STATUSES.contains(e.status) ? terminal : active).add(e);
+            if (TERMINAL_STATUSES.contains(e.status)) terminal.add(e);
         }
         Comparator<ItemLedgerEntry> oldestFirst = Comparator.comparingLong(e -> e.lastSeen);
         terminal.sort(oldestFirst);
-        active.sort(oldestFirst);
         int removed = 0;
         for (ItemLedgerEntry e : terminal) {
             if (removed >= over) break;
             entries.remove(e.uid);
             removed++;
         }
-        for (ItemLedgerEntry e : active) {
-            if (removed >= over) break;
-            entries.remove(e.uid);
-            removed++;
-        }
         if (removed > 0) {
             System.out.println("[AdminTools] Pruned " + removed + " ledger entries (cap " + maxEntries + ")");
+        }
+        if (entries.size() > maxEntries) {
+            System.err.println("[AdminTools] Ledger has " + entries.size() + " active entries, above soft cap "
+                    + maxEntries + "; active identities were preserved");
         }
     }
 

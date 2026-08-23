@@ -1,7 +1,9 @@
 package com.echubbuck.admintools.identity;
 
 import com.echubbuck.admintools.common.ItemIdentity;
+import com.echubbuck.admintools.common.ItemAction;
 import com.echubbuck.admintools.common.ItemLedger;
+import com.echubbuck.admintools.common.ItemMovementEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
@@ -21,7 +23,14 @@ public class ItemIdentityManager {
 
     public UUID ensureIdentity(ItemStack stack, String source, UUID creator, String ownerName) {
         UUID existing = ItemUidComponent.get(stack);
-        if (existing != null) return existing;
+        if (existing != null) {
+            if (!ledger.has(existing.toString())) {
+                ItemIdentity recovered = ItemIdentity.create(existing, "RECOVERED", creator);
+                ledger.registerIdentity(recovered, itemId(stack), stack.getCount(), ownerName, ownerKey(ownerName));
+                if (ownerName != null) ledger.setCreatorName(existing.toString(), ownerName);
+            }
+            return existing;
+        }
         return assignIdentity(stack, source, creator, ownerName);
     }
 
@@ -36,6 +45,17 @@ public class ItemIdentityManager {
             ledger.setCreatorName(identity.uidString(), ownerName);
         }
         return uid;
+    }
+
+    /** Re-identifies the child of a real partial split while retaining lineage. */
+    public UUID identifySplit(UUID parentUid, ItemStack child) {
+        UUID childUid = assignIdentity(child, "SPLIT", null, null);
+        if (childUid == null) return null;
+        ledger.addParent(childUid.toString(), parentUid.toString());
+        ledger.recordEvent(ItemMovementEvent.of(
+                childUid.toString(), ItemAction.SPLIT, itemId(child), child.getCount(),
+                null, parentUid.toString(), childUid.toString(), "unattributed"));
+        return childUid;
     }
 
     /** Location key for an owner name; null-safe for unattributed (ground-spawned) stacks. */

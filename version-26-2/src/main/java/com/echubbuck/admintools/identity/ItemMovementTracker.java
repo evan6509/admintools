@@ -157,21 +157,11 @@ public class ItemMovementTracker {
 
         Map<String, Integer> currentCounts = new HashMap<>();
 
-        // Pass 1: ensure identity + correct transient split duplicates (same uid twice in one player).
-        Map<String, ItemStack> firstStackOfUid = new HashMap<>();
+        // Pass 1: ensure identities. Real splits are identified at ItemStack.split;
+        // repeated UIDs here are therefore preserved for duplicate detection.
         for (ItemStack s : stacks) {
             UUID uid = identityManager.ensureIdentity(s, "UNKNOWN", puuid, name);
             String u = uid.toString();
-            ItemStack existing = firstStackOfUid.putIfAbsent(u, s);
-            if (existing != null) {
-                // A vanilla split copied the component onto a second, independent stack.
-                UUID nuid = identityManager.assignIdentity(s, "SPLIT", puuid, name);
-                identityManager.ledger().addParent(nuid.toString(), u);
-                identityManager.ledger().recordEvent(ItemMovementEvent.of(
-                        nuid.toString(), ItemAction.SPLIT, identityManager.itemId(s), s.getCount(),
-                        name, u, nuid.toString(), ItemIdentityManager.ownerKey(name)));
-                u = nuid.toString();
-            }
             currentCounts.merge(u, s.getCount(), Integer::sum);
             pd.item.putIfAbsent(u, identityManager.itemId(s));
         }
@@ -185,6 +175,7 @@ public class ItemMovementTracker {
             int before = prev.getOrDefault(uid, -1);
             if (before == -1) {
                 pd.deltas.put(uid, now); // new identity (created by a hook or first observation)
+                identityManager.ledger().setOwnerLocation(uid, name, ItemIdentityManager.ownerKey(name));
                 boolean containerEventLogged = containerAuditTracker != null
                         && containerAuditTracker.consumeRecentlyLogged(uid);
                 boolean auditingContainer = containerAuditTracker != null
@@ -198,7 +189,7 @@ public class ItemMovementTracker {
                     identityManager.ledger().recordEvent(ItemMovementEvent.of(
                             uid, ItemAction.CONTAINER_WITHDRAWAL, pd.item.get(uid), now,
                             "container", "container", name, ItemIdentityManager.ownerKey(name)));
-                } else if (!sinkRecorded(sinkPickups, uid)) {
+                } else if (!sinkRecorded(sinkPickups, uid) && !createdAsSplit(uid)) {
                     identityManager.ledger().recordEvent(ItemMovementEvent.of(
                             uid, ItemAction.UNKNOWN, pd.item.get(uid), now, name, null, name,
                             ItemIdentityManager.ownerKey(name)));
@@ -266,6 +257,11 @@ public class ItemMovementTracker {
         prevCounts.put(puuid, new HashMap<>(currentCounts));
         prevItems.put(puuid, new HashMap<>(pd.item));
         return pd;
+    }
+
+    private boolean createdAsSplit(String uid) {
+        var entry = identityManager.ledger().entry(uid);
+        return entry != null && "SPLIT".equals(entry.creationSource);
     }
 
     private void correlateTransfers(List<PlayerDelta> deltas) {

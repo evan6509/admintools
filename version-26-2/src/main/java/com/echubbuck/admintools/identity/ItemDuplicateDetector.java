@@ -41,16 +41,16 @@ public class ItemDuplicateDetector {
         for (Player player : players) {
             if (!detectCreative && player.isCreative()) continue;
             String name = player.getScoreboardName();
-            collect(player.getInventory(), uidLocations, uidItem, name);
-            collect(player.getEnderChestInventory(), uidLocations, uidItem, name);
+            collect(player.getInventory(), uidLocations, uidItem, name + " inventory");
+            collect(player.getEnderChestInventory(), uidLocations, uidItem, name + " ender chest");
         }
 
-        Set<String> seenThisScan = new HashSet<>();
+        Set<String> duplicatedThisScan = new HashSet<>();
         for (Map.Entry<String, List<String>> e : uidLocations.entrySet()) {
             String uid = e.getKey();
             List<String> locations = e.getValue();
-            seenThisScan.add(uid);
             if (locations.size() >= 2) {
+                duplicatedThisScan.add(uid);
                 if (activeAlerts.add(uid)) {
                     String locs = String.join(", ", locations);
                     identityManager.ledger().recordDuplicate(ItemMovementEvent.of(
@@ -61,18 +61,19 @@ public class ItemDuplicateDetector {
                 }
             }
         }
-        activeAlerts.retainAll(seenThisScan);
+        // A resolved UID may alert again if it later becomes duplicated.
+        activeAlerts.retainAll(duplicatedThisScan);
     }
 
     private void collect(net.minecraft.world.Container container, Map<String, List<String>> uidLocations,
-                         Map<String, String> uidItem, String playerName) {
+                         Map<String, String> uidItem, String locationName) {
         for (int i = 0; i < container.getContainerSize(); i++) {
             ItemStack s = container.getItem(i);
             if (s.isEmpty()) continue;
             UUID uid = identityManager.getIdentity(s);
             if (uid == null) continue;
             String u = uid.toString();
-            uidLocations.computeIfAbsent(u, k -> new ArrayList<>()).add(playerName + " slot " + i);
+            uidLocations.computeIfAbsent(u, k -> new ArrayList<>()).add(locationName + " slot " + i);
             uidItem.putIfAbsent(u, identityManager.itemId(s));
         }
     }

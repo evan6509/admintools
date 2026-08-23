@@ -42,8 +42,8 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
   trigger Fabric's normal client compatibility check.
 - `ItemStackMatchingMixin` exempts the uid from `isSameItemSameComponents` so
   vanilla stacking/splitting/merging is unaffected.
-- Split stacks (same uid twice in one inventory) are re-identified same-tick with
-  `SPLIT` lineage; merges record `MERGE` (absorbed parent); player↔player moves
+- Partial stacks are re-identified directly in `ItemStack.split` with `SPLIT`
+  lineage; merges record `MERGE` (absorbed parent); player↔player moves
   are correlated as `TRANSFER`.
 - Persistence: `config/admintools/item_ledger.json` (snapshot) +
   `logs/admintools/item_ledger.jsonl` (events) + `item_duplicates.jsonl`.
@@ -52,7 +52,7 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
   `detect_creative_duplicates` config.
 - Mixins (26.2): `DataComponentPatchNetworkMixin` (outbound UID filtering),
   `RegistrySyncCompatibilityMixin` (legacy-only registry compatibility),
-  `ItemStackMatchingMixin`, `PlayerItemMixin` (pickup/drop), `ItemEntityMixin`
+  `ItemStackMatchingMixin`, `ItemStackSplitMixin`, `PlayerItemMixin` (pickup/drop), `ItemEntityMixin`
   (spawn), `BlockItemPlaceMixin` (place).
   `admintools.mixins.json` is `required: true` — a missed injection crashes the
   game, it does not just log.

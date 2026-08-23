@@ -123,6 +123,90 @@ public class AdminToolsGameTests {
     }
 
     @GameTest
+    public void partialSplitGetsChildIdentity(GameTestHelper helper) {
+        Player player = helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ItemStack parent = new ItemStack(Items.DIAMOND, 8);
+        AdminToolsMod.getItemEventSink().onGive(player, parent);
+        UUID parentUid = AdminToolsMod.getItemIdentityManager().getIdentity(parent);
+
+        ItemStack child = parent.split(3);
+        UUID childUid = AdminToolsMod.getItemIdentityManager().getIdentity(child);
+        ItemLedgerEntry childEntry = childUid == null ? null
+                : AdminToolsMod.getItemLedger().entry(childUid.toString());
+
+        if (parentUid != null && childUid != null && !parentUid.equals(childUid)
+                && childEntry != null && "SPLIT".equals(childEntry.creationSource)
+                && childEntry.parents.contains(parentUid.toString())
+                && parent.getCount() == 5 && child.getCount() == 3) {
+            helper.succeed();
+        } else {
+            helper.fail("partial split did not receive distinct lineage");
+        }
+    }
+
+    @GameTest
+    public void legitimateSplitAcrossPlayersIsNotDuplicate(GameTestHelper helper) {
+        Player sender = helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        Player receiver = helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ItemStack parent = new ItemStack(Items.EMERALD, 12);
+        AdminToolsMod.getItemEventSink().onGive(sender, parent);
+        ItemStack child = parent.split(4);
+        UUID parentUid = AdminToolsMod.getItemIdentityManager().getIdentity(parent);
+        UUID childUid = AdminToolsMod.getItemIdentityManager().getIdentity(child);
+        sender.getInventory().setItem(0, parent);
+        receiver.getInventory().setItem(0, child);
+
+        AdminToolsMod.getItemDuplicateDetector().scanPlayers(java.util.List.of(sender, receiver));
+        if (parentUid != null && childUid != null && !parentUid.equals(childUid)
+                && duplicateCount(parentUid.toString()) == 0
+                && duplicateCount(childUid.toString()) == 0) {
+            helper.succeed();
+        } else {
+            helper.fail("legitimate partial transfer produced a duplicate alert");
+        }
+    }
+
+    @GameTest
+    public void resolvedDuplicateCanAlertAgain(GameTestHelper helper) {
+        Player first = helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        Player second = helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ItemStack a = new ItemStack(Items.GOLD_INGOT, 1);
+        ItemStack b = new ItemStack(Items.GOLD_INGOT, 1);
+        UUID shared = UUID.randomUUID();
+        ItemUidComponent.set(a, shared);
+        ItemUidComponent.set(b, shared);
+        first.getInventory().setItem(0, a);
+        second.getInventory().setItem(0, b);
+
+        AdminToolsMod.getItemDuplicateDetector().scanPlayers(java.util.List.of(first, second));
+        int firstCount = duplicateCount(shared.toString());
+        second.getInventory().setItem(0, ItemStack.EMPTY);
+        AdminToolsMod.getItemDuplicateDetector().scanPlayers(java.util.List.of(first, second));
+        second.getInventory().setItem(0, b);
+        AdminToolsMod.getItemDuplicateDetector().scanPlayers(java.util.List.of(first, second));
+
+        if (firstCount == 1 && duplicateCount(shared.toString()) == 2) {
+            helper.succeed();
+        } else {
+            helper.fail("resolved UID did not generate a fresh duplicate alert");
+        }
+    }
+
+    @GameTest
+    public void missingLedgerEntryIsRecovered(GameTestHelper helper) {
+        ItemStack stack = new ItemStack(Items.IRON_INGOT, 7);
+        UUID uid = UUID.randomUUID();
+        ItemUidComponent.set(stack, uid);
+        AdminToolsMod.getItemIdentityManager().ensureIdentity(stack, "UNKNOWN", null, "RecoveredPlayer");
+        ItemLedgerEntry entry = AdminToolsMod.getItemLedger().entry(uid.toString());
+        if (entry != null && "RECOVERED".equals(entry.creationSource) && entry.count == 7) {
+            helper.succeed();
+        } else {
+            helper.fail("tagged stack with missing ledger entry was not recovered");
+        }
+    }
+
+    @GameTest
     public void uidMigratesFromLegacyComponent(GameTestHelper helper) {
         ItemStack stack = new ItemStack(Items.DIAMOND, 1);
         UUID expected = UUID.randomUUID();
@@ -194,5 +278,13 @@ public class AdminToolsGameTests {
         } else {
             helper.fail("legacy uid component still makes Fabric registry sync require a client mod");
         }
+    }
+
+    private static int duplicateCount(String uid) {
+        int count = 0;
+        for (ItemMovementEvent event : AdminToolsMod.getItemLedger().duplicateAlerts()) {
+            if (uid.equals(event.uid())) count++;
+        }
+        return count;
     }
 }
