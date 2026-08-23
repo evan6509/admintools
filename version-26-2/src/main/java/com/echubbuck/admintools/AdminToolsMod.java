@@ -54,7 +54,7 @@ public class AdminToolsMod implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, context, environment) -> {
             InvSeeCommand.register(dispatcher);
             EnderSeeCommand.register(dispatcher);
-            AdminRoleCommand.register(dispatcher);
+            AdminAccessCommand.register(dispatcher);
             ItemTraceCommand.register(dispatcher);
             ContainerTraceCommand.register(dispatcher);
             AdminItemCommand.register(dispatcher, context);
@@ -102,6 +102,9 @@ public class AdminToolsMod implements ModInitializer {
     }
 
     public static PermissionManager getPermissionManager() { return permissionManager; }
+    public static boolean hasAccess(net.minecraft.commands.CommandSourceStack source, String permission) {
+        return permissionManager.canUse(source, permission);
+    }
     public static ActionLogger getActionLogger() { return actionLogger; }
     public static ConfigManager getConfigManager() { return configManager; }
 

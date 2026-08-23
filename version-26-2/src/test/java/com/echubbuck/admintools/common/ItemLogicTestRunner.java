@@ -22,6 +22,7 @@ public class ItemLogicTestRunner {
     public static void main(String[] args) throws Exception {
         ItemIdentityTest.run();
         ItemLedgerTest.run();
+        PermissionManagerTest.run();
         System.out.println("[AdminTools] ALL UNIT TESTS PASSED");
     }
 
@@ -118,6 +119,31 @@ public class ItemLogicTestRunner {
             // missing entry
             isNull(ledger.entry(UUID.randomUUID().toString()), "missing entry is null");
             isTrue(ledger.allEntries().size() >= 1, "allEntries non-empty");
+        }
+    }
+
+    // ---- Per-player permissions ----
+
+    static class PermissionManagerTest {
+        static void run() throws Exception {
+            Path tmp = Files.createTempDirectory("admintools-permissions-test");
+            Path permissions = tmp.resolve("permissions.json");
+            Path legacy = tmp.resolve("roles.json");
+            UUID player = UUID.randomUUID();
+
+            PermissionManager manager = new PermissionManager(permissions, legacy);
+            isTrue(manager.grant(player, PermissionNodes.INVSEE_EDIT), "permission grant changes state");
+            isTrue(manager.hasPermission(player, PermissionNodes.INVSEE_EDIT), "exact permission");
+            isTrue(!manager.hasPermission(player, PermissionNodes.ENDERSEE), "ungranted permission denied");
+
+            manager.grant(player, PermissionNodes.ADMINITEM_ALL);
+            isTrue(manager.hasPermission(player, PermissionNodes.ADMINITEM_GIVE), "branch wildcard");
+            isTrue(manager.hasPermission(player, PermissionNodes.ADMINITEM_REMOVE), "branch wildcard remove");
+
+            PermissionManager reloaded = new PermissionManager(permissions, legacy);
+            isTrue(reloaded.hasPermission(player, PermissionNodes.INVSEE_EDIT), "permission persistence");
+            isTrue(reloaded.remove(player, PermissionNodes.INVSEE_EDIT), "permission removal changes state");
+            isTrue(!reloaded.hasPermission(player, PermissionNodes.INVSEE_EDIT), "removed permission denied");
         }
     }
 }

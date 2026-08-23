@@ -1,6 +1,7 @@
 package com.echubbuck.admintools.commands;
 
 import com.echubbuck.admintools.AdminToolsMod;
+import com.echubbuck.admintools.common.PermissionNodes;
 import com.echubbuck.admintools.container.ContainerAuditEvent;
 import com.echubbuck.admintools.container.ContainerAuditTracker;
 import com.echubbuck.admintools.container.ContainerKey;
@@ -10,7 +11,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.text.SimpleDateFormat;
@@ -27,7 +27,7 @@ public final class ContainerTraceCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("containertrace")
-                .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.CONTAINERTRACE))
                 .then(Commands.argument("x", IntegerArgumentType.integer())
                         .then(Commands.argument("y", IntegerArgumentType.integer())
                                 .then(Commands.argument("z", IntegerArgumentType.integer())

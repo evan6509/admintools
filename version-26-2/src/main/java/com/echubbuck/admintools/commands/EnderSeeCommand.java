@@ -1,6 +1,7 @@
 package com.echubbuck.admintools.commands;
 
 import com.echubbuck.admintools.AdminToolsMod;
+import com.echubbuck.admintools.common.PermissionNodes;
 import com.echubbuck.admintools.gui.EnderSeeScreenHandler;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
@@ -8,14 +9,13 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.SimpleMenuProvider;
 
 public class EnderSeeCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("endersee")
-                .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.ENDERSEE))
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(ctx -> execute(ctx.getSource(), EntityArgument.getPlayer(ctx, "player")))));
     }

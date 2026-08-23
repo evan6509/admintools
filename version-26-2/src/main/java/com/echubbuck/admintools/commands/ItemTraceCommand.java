@@ -1,6 +1,7 @@
 package com.echubbuck.admintools.commands;
 
 import com.echubbuck.admintools.AdminToolsMod;
+import com.echubbuck.admintools.common.PermissionNodes;
 import com.echubbuck.admintools.common.ItemLedgerEntry;
 import com.echubbuck.admintools.common.ItemMovementEvent;
 import com.mojang.brigadier.CommandDispatcher;
@@ -8,7 +9,6 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.permissions.Permissions;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -20,7 +20,7 @@ public class ItemTraceCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("itemtrace")
-                .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.ITEMTRACE))
                 .then(Commands.argument("uid", StringArgumentType.word())
                         .executes(ctx -> execute(ctx.getSource(), StringArgumentType.getString(ctx, "uid")))));
     }

@@ -3,6 +3,7 @@ package com.echubbuck.admintools.commands;
 import com.echubbuck.admintools.AdminToolsMod;
 import com.echubbuck.admintools.common.ItemAction;
 import com.echubbuck.admintools.common.ItemMovementEvent;
+import com.echubbuck.admintools.common.PermissionNodes;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -15,13 +16,13 @@ import net.minecraft.commands.arguments.item.ItemArgument;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.item.ItemStack;
 
 public class AdminItemCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext context) {
         var give = Commands.literal("give")
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.ADMINITEM_GIVE))
                 .then(Commands.argument("player", EntityArgument.player())
                         .then(Commands.argument("item", ItemArgument.item(context))
                                 .executes(ctx -> give(ctx, 1))
@@ -29,6 +30,7 @@ public class AdminItemCommand {
                                         .executes(ctx -> give(ctx, IntegerArgumentType.getInteger(ctx, "count"))))));
 
         var remove = Commands.literal("remove")
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.ADMINITEM_REMOVE))
                 .then(Commands.argument("player", EntityArgument.player())
                         .then(Commands.argument("item", ItemArgument.item(context))
                                 .executes(ctx -> remove(ctx, 1))
@@ -36,7 +38,8 @@ public class AdminItemCommand {
                                         .executes(ctx -> remove(ctx, IntegerArgumentType.getInteger(ctx, "count"))))));
 
         dispatcher.register(Commands.literal("adminitem")
-                .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                .requires(src -> AdminToolsMod.hasAccess(src, PermissionNodes.ADMINITEM_GIVE)
+                        || AdminToolsMod.hasAccess(src, PermissionNodes.ADMINITEM_REMOVE))
                 .then(give)
                 .then(remove));
     }

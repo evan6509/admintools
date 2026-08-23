@@ -19,7 +19,7 @@ Each version module builds a self-contained jar:
 |---|---|---|---|
 | Player inventory viewer | `/invsee <player> [edit]` | OP4 | 26.2 |
 | Ender chest viewer | `/endersee <player>` | OP4 | 26.2 |
-| Role/permission management | `/adminrole grant\|remove\|assign` | OP2 | 26.2 |
+| Per-player command access | `/adminaccess grant\|remove\|list` | OP4 | 26.2 |
 | Item identity & anti-dupe | `/itemtrace <uuid>` | OP4 | 26.2 |
 | Admin item give/remove | `/adminitem give\|remove <player> <item> [count]` | OP4 | 26.2 |
 | Container audit | `/containertrace <x> <y> <z>` | OP4 | 26.2 |
@@ -27,8 +27,8 @@ Each version module builds a self-contained jar:
 - `/invsee` opens a 36-slot vanilla chest GUI backed by the target's real
   inventory; with `edit` (or `invsee_edit_mode` in config) it is writable.
 - `/endersee` opens a 27-slot single-chest GUI, read-only.
-- `/adminrole` manages JSON-defined roles (`config/admintools/roles.json`),
-  hot-reloadable.
+- `/adminaccess` grants AdminTools command permissions directly to player UUIDs;
+  OP4 always retains full access.
 
 ### Item identity (26.2)
 
@@ -64,7 +64,7 @@ can connect and normal stacking, splitting, and merging are unaffected.
 | `detect_creative_duplicates` | `false` | Include creative players in dupe detection |
 | `enable_container_audit` | `true` | Log player-opened chests, barrels, and shulker boxes |
 
-Roles live in `config/admintools/roles.json`.
+Per-player grants live in `config/admintools/permissions.json`.
 
 ## Building
 
@@ -91,8 +91,7 @@ Manual server testing (26.2):
 Server data goes to `version-26-2/run/`. AdminTools is server-only; clients do
 not need the AdminTools jar, Fabric Loader, or Fabric API to connect. The
 viewer GUIs use vanilla menu types and are rendered by the vanilla client.
-Make yourself OP in the server console: OP4 for viewers/trace/item commands, OP2 for
-`/adminrole`.
+Make yourself OP4 in the server console to manage AdminTools access.
 
 ## Development notes
 
