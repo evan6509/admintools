@@ -5,6 +5,7 @@ run/
 *.iml
 .idea/
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 *.zip
 .DS_Store
 *.note
