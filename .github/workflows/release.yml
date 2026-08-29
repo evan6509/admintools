@@ -34,6 +34,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            AdminTools for Minecraft 26.2. Install the Fabric JAR on Fabric servers or the
+            Paper JAR on Paper servers; clients do not need AdminTools.
+
+            Fabric provides exact persistent per-stack identity, split/merge lineage, and
+            duplicate detection through server mixins. Paper provides durable UIDs for
+            non-stackable items and stack-safe best-effort correlation for stackable items.
+            See README.md for the complete platform comparison and installation details.
           files: |
             version-26-2/build/libs/*.jar
             paper-26-2/build/libs/*.jar
