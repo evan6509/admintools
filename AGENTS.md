@@ -8,6 +8,7 @@ build currently targets one supported version:
 | Module | Target | Build command |
 |---|---|---|
 | `version-26-2` | MC 26.2, Java 25 | `./gradlew :version-26-2:build` |
+| `paper-26-2` | Paper 26.2, Java 25 | `./gradlew :paper-26-2:build` |
 
 - `build-26-2/` is a **stale standalone snapshot** (git-tracked, predates the item
   identity feature — no `ItemTraceCommand`, no mixins). Do not edit it;
@@ -58,11 +59,28 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
   `admintools.mixins.json` is `required: true` — a missed injection crashes the
   game, it does not just log.
 
+### Paper adapter (26.2)
+
+- `paper-26-2/` is a normal Paper plugin with `plugin.yml`; it targets pinned
+  Paper API `26.2.build.121-stable` and builds a self-contained JAR containing
+  Gson.
+- It compiles the platform-neutral model/config/ledger sources directly from
+  `version-26-2/src/main/java/com/echubbuck/admintools/common/`. Keep those
+  classes free of Fabric/Minecraft imports. `PermissionManager` is excluded and
+  has a Paper-specific counterpart.
+- Commands, inventory viewers, lifecycle, scheduling, and container sessions
+  use supported Paper APIs only.
+- Non-stackable items retain a PDC UID. Stackable items deliberately do not:
+  distinct PDC values alter vanilla stack equality. Their Paper identity is a
+  persisted, best-effort slot observation and cannot provide Fabric's exact
+  split/merge guarantees.
+
 ## Architecture — read before editing
 
 - **Common classes are vendored in `version-26-2`.** The module owns its copy of
   `com.echubbuck.admintools.common.*` under `src/main/java` and builds a
-  self-contained jar.
+  self-contained jar. Platform-neutral files in that package are also compiled
+  into the Paper module; do not add loader-specific imports to them.
 - **No client source set, no client entrypoint.** There is no `src/client/java`
   and no `client` entrypoint in `fabric.mod.json` (`environment: "server"`). The
   viewer GUIs are vanilla `ChestMenu` subclasses (`InvSeeScreenHandler`,
@@ -80,6 +98,7 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
   `--release 25`.
 - Dependencies: Gson 2.10.1, Fabric Loader, and Fabric API. No
   third-party mod dependencies.
+- Paper uses Paper API build 121 as `compileOnly` and bundles Gson 2.10.1.
 
 ### 26.2 API details
 
@@ -98,6 +117,7 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
   plain `main`-class runner (`ItemLogicTestRunner`), **not JUnit**.
 - `./gradlew :version-26-2:runGametest` — `@GameTest` methods, which live in
   `src/main/java/com/echubbuck/admintools/test/` (not `src/test`).
+- `./gradlew :paper-26-2:build` — compiles and packages the Paper adapter.
 
 ## Manual testing (26.2)
 
@@ -117,4 +137,5 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
 ## Git workflow
 
 Conventional-commit style (`feat:`, `refactor:`, `chore:`). Commit after each
-logical unit. Verify with `./gradlew :<module>:build`.
+logical unit. Cross-platform changes must build both modules. GitHub releases
+attach both the Fabric and Paper JARs.

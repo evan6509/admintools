@@ -1,0 +1,39 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify Fabric and Paper
+        run: ./gradlew :version-26-2:runUnitTests :version-26-2:build :paper-26-2:build
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: admintools-${{ github.ref_name }}
+          path: |
+            version-26-2/build/libs/admintools-26.2-*.jar
+            paper-26-2/build/libs/admintools-paper-26.2-*.jar
+          if-no-files-found: error
+      - name: Attach both platforms to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            version-26-2/build/libs/*.jar
+            paper-26-2/build/libs/*.jar
