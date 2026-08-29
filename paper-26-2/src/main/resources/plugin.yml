@@ -1,0 +1,55 @@
+name: AdminTools
+version: '${version}'
+main: com.echubbuck.admintools.paper.PaperAdminToolsPlugin
+description: Server-authoritative administration and item auditing tools for Paper.
+author: echubbuck
+website: https://github.com/evan6509/admintools
+api-version: '26.2'
+commands:
+  admintools:
+    description: Reload AdminTools configuration.
+    usage: /admintools reload
+  invsee:
+    description: View or edit an online player's inventory.
+    usage: /invsee <player> [edit]
+  endersee:
+    description: View an online player's ender chest.
+    usage: /endersee <player>
+  adminaccess:
+    description: Manage per-player AdminTools access.
+    usage: /adminaccess <grant|remove|list> <player> [permission]
+  itemtrace:
+    description: Display the audit history for an item identity.
+    usage: /itemtrace <uuid> [page]
+  adminitem:
+    description: Give or remove audited items.
+    usage: /adminitem <give|remove> <player> <item> [count]
+  containertrace:
+    description: Display audit history for a world container.
+    usage: /containertrace <x> <y> <z> [world]
+permissions:
+  admintools.*:
+    description: Access every AdminTools command.
+    default: op
+    children:
+      admintools.invsee: true
+      admintools.invsee.edit: true
+      admintools.endersee: true
+      admintools.itemtrace: true
+      admintools.containertrace: true
+      admintools.adminitem.give: true
+      admintools.adminitem.remove: true
+  admintools.invsee:
+    default: false
+  admintools.invsee.edit:
+    default: false
+  admintools.endersee:
+    default: false
+  admintools.itemtrace:
+    default: false
+  admintools.containertrace:
+    default: false
+  admintools.adminitem.give:
+    default: false
+  admintools.adminitem.remove:
+    default: false

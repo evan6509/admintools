@@ -1,0 +1,62 @@
+plugins {
+    id("java")
+}
+
+base {
+    archivesName = "admintools-paper-26.2"
+}
+
+repositories {
+    maven { url "https://repo.papermc.io/repository/maven-public/" }
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly("io.papermc.paper:paper-api:26.2.build.112-stable")
+    implementation("com.google.code.gson:gson:2.10.1")
+}
+
+def fabricCommon = project(":version-26-2").file("src/main/java/com/echubbuck/admintools/common")
+def sharedCommonSources = [
+        "ActionLogger.java",
+        "ConfigManager.java",
+        "ItemAction.java",
+        "ItemIdentity.java",
+        "ItemLedger.java",
+        "ItemLedgerEntry.java",
+        "ItemMovementEvent.java",
+        "PermissionNodes.java"
+].collect { new File(fabricCommon, it) }
+
+tasks.named("compileJava", JavaCompile) {
+    source(sharedCommonSources)
+    options.release = 25
+}
+
+tasks.named("processResources", ProcessResources) {
+    inputs.property("version", project.version)
+    filesMatching("plugin.yml") {
+        expand("version": project.version)
+    }
+}
+
+tasks.named("jar", Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    from(rootProject.file("LICENSE")) {
+        rename { "LICENSE_admintools-paper-26.2" }
+    }
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+test {
+    useJUnitPlatform()
+    failOnNoDiscoveredTests = false
+}
