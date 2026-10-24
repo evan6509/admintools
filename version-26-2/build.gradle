@@ -66,3 +66,13 @@ jar {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
 }
+
+// GameTests remain on the development runtime classpath, never in shipped jars.
+jar {
+    exclude "com/echubbuck/admintools/test/**"
+    filesMatching("fabric.mod.json") {
+        filter { line ->
+            line.contains('"fabric-gametest"') ? null : line.replace('AdminToolsMod"],', 'AdminToolsMod"]')
+        }
+    }
+}

@@ -10,3 +10,4 @@ rootProject.name = "admintools"
 
 include("version-26-2")
 include("paper-26-2")
+include("version-26-3")

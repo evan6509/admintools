@@ -13,9 +13,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 
-import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -107,37 +105,25 @@ public final class ItemUidComponent {
     public static DataComponentPatch sanitizeForNetwork(DataComponentPatch patch) {
         if (patch == null || patch.isEmpty()) return patch;
 
-        boolean needsSanitizing = false;
-        for (Map.Entry<DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
-            if (entry.getKey() == LEGACY_TYPE) {
-                needsSanitizing = true;
-                break;
-            }
-            if (entry.getKey() == DataComponents.CUSTOM_DATA && entry.getValue().isPresent()) {
-                CustomData data = (CustomData) entry.getValue().get();
-                if (data.copyTag().contains(UID_KEY)) {
-                    needsSanitizing = true;
-                    break;
-                }
-            }
-        }
-        if (!needsSanitizing) return patch;
+        // split() is supported by both 26.2 and 26.3; 26.3 removed entrySet().
+        DataComponentPatch.SplitResult parts = patch.split();
+        CustomData data = parts.added().get(DataComponents.CUSTOM_DATA);
+        if (!parts.added().has(LEGACY_TYPE) && !parts.removed().contains(LEGACY_TYPE)
+                && (data == null || !data.copyTag().contains(UID_KEY))) return patch;
 
         DataComponentPatch.Builder sanitized = DataComponentPatch.builder();
-        for (Map.Entry<DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
-            DataComponentType<?> type = entry.getKey();
-            Optional<?> value = entry.getValue();
-
-            if (type == LEGACY_TYPE) continue;
-            if (type == DataComponents.CUSTOM_DATA && value.isPresent()) {
-                CompoundTag tag = ((CustomData) value.get()).copyTag();
+        for (TypedDataComponent<?> component : parts.added()) {
+            if (component.type() == LEGACY_TYPE) continue;
+            if (component.type() == DataComponents.CUSTOM_DATA) {
+                CompoundTag tag = ((CustomData) component.value()).copyTag();
                 tag.remove(UID_KEY);
-                if (!tag.isEmpty()) {
-                    sanitized.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-                }
-                continue;
+                if (!tag.isEmpty()) sanitized.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+            } else {
+                sanitized.set(component);
             }
-            copyPatchEntry(sanitized, type, value);
+        }
+        for (DataComponentType<?> type : parts.removed()) {
+            if (type != LEGACY_TYPE) sanitized.remove(type);
         }
         return sanitized.build();
     }
@@ -172,14 +158,4 @@ public final class ItemUidComponent {
         return map.get((DataComponentType) type);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void copyPatchEntry(DataComponentPatch.Builder builder,
-                                       DataComponentType<?> type,
-                                       Optional<?> value) {
-        if (value.isPresent()) {
-            builder.set(TypedDataComponent.createUnchecked((DataComponentType) type, value.get()));
-        } else {
-            builder.remove((DataComponentType) type);
-        }
-    }
 }

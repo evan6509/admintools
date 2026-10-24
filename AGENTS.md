@@ -3,11 +3,12 @@
 ## Project state
 
 Fabric mod providing server-authoritative admin tools. The multi-project Gradle
-build currently targets one supported version:
+build has the following targets (26.3 is an unreleased review-branch port):
 
 | Module | Target | Build command |
 |---|---|---|
 | `version-26-2` | MC 26.2, Java 25 | `./gradlew :version-26-2:build` |
+| `version-26-3` | Fabric MC 26.3, Java 25 | `./gradlew :version-26-3:build` |
 | `paper-26-2` | Paper 26.2, Java 25 | `./gradlew :paper-26-2:build` |
 
 - `build-26-2/` is a **stale standalone snapshot** (git-tracked, predates the item
@@ -32,7 +33,7 @@ Gating: viewer/trace/item commands accept their per-player permission node or
 OP4 (`Permissions.COMMANDS_GAMEMASTER`). `/adminaccess` itself requires OP4.
 Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.).
 
-### Item identity system (26.2 only)
+### Fabric item identity system
 
 - Every stack gets a persistent `admintools:uid` key inside vanilla
   `minecraft:custom_data` on first observation (not re-generated on copy;
@@ -77,6 +78,13 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
 
 ## Architecture — read before editing
 
+- **Fabric 26.3 reuses the canonical implementation and logic tests, with target-specific adapters.**
+  It adds a 26.3 player-drop mixin/config and a focused GameTest for the changed
+  `LivingEntity.drop` signature; its own `fabric.mod.json` and mixin config select
+  exact Minecraft 26.3, Loader 0.19.3, and Fabric API 0.165.0+26.3. Both Fabric
+  metadata files require their exact Minecraft version, and GameTest classes/entrypoints
+  are excluded from production jars. The 26.3 build and all 18 GameTests passed on
+  2026-10-24; connected-client/manual gameplay remains unverified.
 - **Common classes are vendored in `version-26-2`.** The module owns its copy of
   `com.echubbuck.admintools.common.*` under `src/main/java` and builds a
   self-contained jar. Platform-neutral files in that package are also compiled
@@ -94,7 +102,7 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
 ## Key build details
 
 - Gradle 9.5.1 (wrapper); Loom 1.17.14.
-- 26.2 uses `net.fabricmc.fabric-loom` (non-obfuscated pipeline) and
+- Both Fabric targets use `net.fabricmc.fabric-loom` (non-obfuscated pipeline) and
   `--release 25`.
 - Dependencies: Gson 2.10.1, Fabric Loader, and Fabric API. No
   third-party mod dependencies.
@@ -118,6 +126,12 @@ Viewers are additionally toggleable via config (`enable_inventory_viewer`, etc.)
 - `./gradlew :version-26-2:runGametest` — `@GameTest` methods, which live in
   `src/main/java/com/echubbuck/admintools/test/` (not `src/test`).
 - `./gradlew :paper-26-2:build` — compiles and packages the Paper adapter.
+
+- `./gradlew :version-26-3:runUnitTests` and `:version-26-3:runGametest` reuse
+  the canonical suites. Use Java 25 and `--no-daemon --max-workers=1`.
+- `python3 tests/test_fabric_targets.py [--jars]` checks target contracts.
+- Current public v1.0.0 contains only Fabric 26.2 and Paper 26.2 artifacts.
+  Fabric 26.3 is unreleased; connected-client/manual gameplay remains outstanding.
 
 ## Manual testing (26.2)
 
