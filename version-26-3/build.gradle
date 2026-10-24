@@ -1,0 +1,95 @@
+plugins {
+    id("net.fabricmc.fabric-loom") version "${loom_version_26_3}"
+}
+
+base {
+    archivesName = "admintools-26.3"
+}
+
+loom {
+    mods {
+        admintools {
+            sourceSet sourceSets.main
+        }
+    }
+    runs {
+        gametest {
+            // Runs the @GameTest methods in com.echubbuck.admintools.test.
+            server()
+            vmArg "-Dfabric-api.gametest"
+        }
+    }
+}
+
+repositories {
+    maven { url "https://maven.fabricmc.net/" }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft("com.mojang:minecraft:${minecraft_version_26_3}")
+    implementation("net.fabricmc:fabric-loader:${loader_version_26_3}")
+    implementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version_26_3}")
+    implementation("com.google.code.gson:gson:2.10.1")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+tasks.withType(ProcessResources).configureEach {
+    inputs.property("version", project.version)
+    filesMatching("fabric.mod.json") {
+        expand("version": project.version)
+    }
+}
+
+test {
+    failOnNoDiscoveredTests = false
+}
+
+tasks.register("runUnitTests", JavaExec) {
+    group = "verification"
+    description = "Runs the dependency-free unit tests (ItemLogicTestRunner)."
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "com.echubbuck.admintools.common.ItemLogicTestRunner"
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+// Both Fabric targets compile the canonical implementation and logic tests.
+sourceSets {
+    main {
+        java.srcDirs = ["../version-26-2/src/main/java", "src/main/java"]
+        resources.srcDirs += ["../version-26-2/src/main/resources"]
+        resources.exclude "fabric.mod.json"
+        resources.exclude "admintools.mixins.json"
+    }
+    test.java.srcDirs = ["../version-26-2/src/test/java"]
+}
+// Add target metadata separately so the canonical resource is not duplicated.
+processResources {
+    from("src/main/resources/fabric.mod.json") {
+        expand("version": project.version)
+    }
+}
+
+// GameTests remain on the development runtime classpath, never in shipped jars.
+jar {
+    exclude "com/echubbuck/admintools/test/**"
+    filesMatching("fabric.mod.json") {
+        filter { line ->
+            line.contains('"fabric-gametest"') ? null : line.replace('AdminToolsMod"],', 'AdminToolsMod"]')
+        }
+    }
+}

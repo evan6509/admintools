@@ -1,6 +1,6 @@
 # AdminTools
 
-Server-authoritative admin tools for Minecraft 26.2 on Fabric and Paper. View
+Server-authoritative admin tools for Minecraft 26.2/26.3 on Fabric and 26.2 on Paper. View
 player inventories and ender chests in vanilla GUIs, manage per-player command
 access, and audit item and container movement.
 
@@ -9,9 +9,13 @@ access, and audit item and container movement.
 | Module | Platform | Minecraft | Java | Platform version |
 |---|---|---|---|---|
 | `version-26-2` | Fabric | 26.2 | 25 | Loader >= 0.19.3, Fabric API >= 0.154.2 |
+| `version-26-3` | Fabric (review branch) | 26.3 | 25 | Loader >= 0.19.3, Fabric API >= 0.165.0 |
 | `paper-26-2` | Paper | 26.2 | 25 | Paper API 26.2 build 121 |
 
-Both modules build self-contained server JARs. Install exactly one artifact for
+The current published **v1.0.0 release contains only Fabric 26.2 and Paper 26.2 artifacts**.
+Fabric 26.3 is available as source on this review branch and is not yet released.
+
+The modules build server JARs. Install exactly one artifact for
 the server platform; clients do not install AdminTools.
 
 ## Features
@@ -105,13 +109,15 @@ Available `/adminaccess` permission nodes:
 Requires the Gradle wrapper (Gradle 9.5.1, Loom 1.17.14):
 
 ```bash
-./gradlew :version-26-2:build   # Fabric
+./gradlew :version-26-2:build   # Fabric 26.2
+./gradlew :version-26-3:build   # Fabric 26.3 (review branch)
 ./gradlew :paper-26-2:build     # Paper
 ```
 
 Artifacts:
 
 - `version-26-2/build/libs/admintools-26.2-1.0.0.jar`
+- `version-26-3/build/libs/admintools-26.3-1.0.0.jar` (unreleased)
 - `paper-26-2/build/libs/admintools-paper-26.2-1.0.0.jar`
 
 ## Testing
@@ -119,7 +125,27 @@ Artifacts:
 ```bash
 ./gradlew :version-26-2:runUnitTests   # dependency-free logic tests
 ./gradlew :version-26-2:runGametest    # @GameTest suite
+./gradlew :version-26-3:runUnitTests
+./gradlew :version-26-3:runGametest
+./gradlew :paper-26-2:build           # Paper compile/package check
+python3 tests/test_fabric_targets.py
+python3 tests/test_fabric_targets.py --jars # after building both Fabric jars
 ```
+
+Use Java 25 and append `--no-daemon --max-workers=1` for sequential verification.
+
+### Verification status (2026-10-24)
+
+- The rerun Gradle build passed for Fabric 26.2, Fabric 26.3, and Paper 26.2.
+- The Fabric GameTest suites passed all 17 required tests on 26.2 and all 18 on
+  26.3. The 26.3-specific suite exercises a player drop and verifies one `DROP`
+  ledger event with the item UID preserved.
+- Both production Fabric JARs passed metadata and test-code exclusion checks.
+- These GameTests use a disposable harness. No connected vanilla-client or
+  manual gameplay smoke test was performed for this branch build. The 26.3
+  artifact remains unreleased and is not part of public v1.0.0.
+
+Do not accept the EULA or run the manual server as part of automated verification.
 
 Manual server testing (26.2):
 

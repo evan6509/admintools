@@ -1,0 +1,25 @@
+{
+    "schemaVersion": 1,
+    "id": "admintools",
+    "version": "${version}",
+    "name": "AdminTools",
+    "description": "Server-authoritative admin tools for inventory inspection, item tracking, and container auditing.",
+    "authors": ["echubbuck"],
+    "contact": {},
+    "license": "MIT",
+    "icon": "assets/admintools/icon.png",
+    "environment": "server",
+    "entrypoints": {
+        "main": ["com.echubbuck.admintools.AdminToolsMod"],
+        "fabric-gametest": ["com.echubbuck.admintools.test.AdminToolsGameTests", "com.echubbuck.admintools.test.AdminTools26_3GameTests"]
+    },
+    "mixins": [
+        "admintools-26-3.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.19.3",
+        "fabric-api": ">=0.165.0",
+        "minecraft": "26.3",
+        "java": ">=25"
+    }
+}
