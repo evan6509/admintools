@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# Serialize main builds so consecutive merges each receive a unique release.
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,13 +24,35 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Test release numbering
+        run: python3 tests/test_release_version.py
+      - name: Select release version
+        id: release
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        shell: bash
+        run: |
+          version=$(python3 .github/scripts/release_version.py)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build all modules and run logic tests
-        run: ./gradlew build runUnitTests
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          args=()
+          if [[ -n "$RELEASE_VERSION" ]]; then
+            args+=("-PreleaseVersion=$RELEASE_VERSION")
+          fi
+          ./gradlew build runUnitTests "${args[@]}"
+      - name: Verify production Fabric JARs
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version || '1.0.0' }}
+        run: python3 tests/test_fabric_targets.py --jars
       - name: Collect installable JARs
         shell: bash
         run: |
@@ -63,9 +91,11 @@ jobs:
           path: release-jars/*.jar
           if-no-files-found: error
       - name: Attach JARs to GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.release.outputs.version != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.release.outputs.version }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           body: |
             Choose the JAR matching your server platform and Minecraft version.

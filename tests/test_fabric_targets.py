@@ -1,11 +1,13 @@
 """Target contracts; optionally inspect built production jars with --jars."""
 import json
+import os
 from pathlib import Path
 import sys
 import unittest
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+VERSION = os.environ.get('RELEASE_VERSION', '1.0.0')
 JARS = '--jars' in sys.argv
 if JARS:
     sys.argv.remove('--jars')
@@ -17,7 +19,7 @@ class FabricTargets(unittest.TestCase):
                 module = 'version-' + target.replace('.', '-')
                 self.assertIn(f'include("{module}")', (ROOT / 'settings.gradle').read_text())
                 if JARS:
-                    with zipfile.ZipFile(ROOT / module / 'build/libs' / f'admintools-{target}-1.0.0.jar') as jar:
+                    with zipfile.ZipFile(ROOT / module / 'build/libs' / f'admintools-{target}-{VERSION}.jar') as jar:
                         data = json.loads(jar.read('fabric.mod.json'))
                         self.assertFalse(any('/test/' in n or 'ItemLogicTestRunner' in n for n in jar.namelist()))
                         config_name = 'admintools.mixins.json' if target == '26.2' else 'admintools-26-3.mixins.json'
@@ -28,7 +30,7 @@ class FabricTargets(unittest.TestCase):
                     data = json.loads((ROOT / module / 'src/main/resources/fabric.mod.json').read_text())
                     self.assertIn(f'archivesName = "admintools-{target}"', (ROOT / module / 'build.gradle').read_text())
                 self.assertEqual(data['id'], 'admintools')
-                self.assertEqual(data['version'], '1.0.0' if JARS else '${version}')
+                self.assertEqual(data['version'], VERSION if JARS else '${version}')
                 self.assertEqual(data['environment'], 'server')
                 self.assertEqual(data['entrypoints']['main'], ['com.echubbuck.admintools.AdminToolsMod'])
                 self.assertNotIn('client', data['entrypoints'])
@@ -53,7 +55,7 @@ class FabricTargets(unittest.TestCase):
             module = ROOT / ('version-' + target.replace('.', '-'))
             with self.subTest(target=target):
                 if JARS:
-                    jar_path = module / 'build/libs' / f'admintools-{target}-1.0.0.jar'
+                    jar_path = module / 'build/libs' / f'admintools-{target}-{VERSION}.jar'
                     with zipfile.ZipFile(jar_path) as jar:
                         metadata = json.loads(jar.read('fabric.mod.json'))
                         self.assertEqual(metadata['mixins'], [config_name])

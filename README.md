@@ -168,6 +168,16 @@ AdminTools permission nodes with `/adminaccess` or a Paper permission plugin.
 See [AGENTS.md](AGENTS.md) for architecture details. `build-26-2/` is a stale
 standalone Fabric snapshot and must not be edited.
 
+## Releases and branches
+
+Use `codex/development` for ongoing work and merge it into `main` to publish.
+Every successful push or merge to `main` builds all supported modules, runs the
+logic tests, and publishes a GitHub release with all installable Fabric and Paper
+JARs. The workflow increments the highest stable `vMAJOR.MINOR.PATCH` tag's patch
+version and embeds that version in the JARs. Retrying an already released commit
+reuses its tag. Failed builds do not publish a release. Manual runs on `main`
+also publish; explicit stable version tags remain supported.
+
 ## License
 
 MIT
