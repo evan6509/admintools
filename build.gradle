@@ -1,5 +1,5 @@
 group = "com.echubbuck"
-version = "1.0.0"
+version = providers.gradleProperty("releaseVersion").getOrElse("1.0.0")
 
 subprojects {
     group = rootProject.group
