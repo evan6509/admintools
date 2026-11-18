@@ -181,3 +181,5 @@ also publish; explicit stable version tags remain supported.
 ## License
 
 MIT
+
+Paper editable inventory views apply cursor clicks, shift transfers, hotbar swaps, and validated drags directly to the live target inventory. Self-viewing is rejected. Drop, creative clone, double-click collection, and bundle actions in these views are disabled. Read-only and ender views refresh each tick.
