@@ -108,6 +108,8 @@ public final class PaperAuditCommands {
         }
         String itemId = material.getKey().toString();
         String actor = sender.getName();
+        // Observe unrelated changes before starting the synchronous command operation.
+        plugin.itemTracker().scanNow();
         if (give) {
             plugin.itemTracker().noteAdminAction(target, itemId, ItemAction.ADMIN_GIVE, actor);
             int remaining = target.getInventory().addItem(new ItemStack(material, count)).values().stream()
