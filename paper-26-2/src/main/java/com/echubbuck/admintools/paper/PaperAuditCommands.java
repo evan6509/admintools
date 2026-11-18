@@ -63,9 +63,10 @@ public final class PaperAuditCommands {
         int page = 1;
         try {
             uid = UUID.fromString(args[0]).toString();
-            if (args.length == 2) page = Math.max(1, Integer.parseInt(args[1]));
+            if (args.length == 2) page = Integer.parseInt(args[1]);
+            if (page < 1 || page > 100) throw new IllegalArgumentException("page out of range");
         } catch (IllegalArgumentException exception) {
-            return fail(sender, "Invalid UUID or page number.");
+            return fail(sender, "Invalid UUID or page number (1-100).");
         }
         ItemLedgerEntry entry = plugin.ledger().entry(uid);
         if (entry == null) return fail(sender, "No identity found for " + uid + ".");
