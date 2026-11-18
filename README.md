@@ -181,3 +181,5 @@ also publish; explicit stable version tags remain supported.
 ## License
 
 MIT
+
+Paper editable inventory views apply cursor clicks, shift transfers, hotbar swaps, directly to the live target inventory. Validated drags commit on the next tick after Paper restores the canceled drag cursor, and abort if the view, cursor, or affected live slots change. Self-viewing is rejected. Drop, creative clone, double-click collection, and bundle actions in these views are disabled. Read-only and ender views refresh each tick.

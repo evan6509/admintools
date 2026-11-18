@@ -77,7 +77,7 @@ final class PaperTestSupport {
         @Override public int getAmount() { return amount; }
         @Override public void setAmount(int amount) { this.amount = amount; }
         @Override public int getMaxStackSize() { return material == Material.DIAMOND_SWORD ? 1 : 64; }
-        @Override public boolean isEmpty() { return amount <= 0 || material.isAir(); }
+        @Override public boolean isEmpty() { return amount <= 0 || material == Material.AIR; }
         @Override public Stack clone() { return new Stack(material, amount, new HashMap<>(values)); }
         @Override public boolean isSimilar(ItemStack other) {
             return other instanceof Stack stack && material == stack.material && values.equals(stack.values);

@@ -46,6 +46,7 @@ public final class PaperAdminToolsPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (inventoryViewer != null) inventoryViewer.close();
+        if (inventoryViewer != null) inventoryViewer.stopRefreshing();
         if (auditCommands != null) auditCommands.close();
         if (containerAuditor != null) containerAuditor.close();
         if (itemTracker != null) itemTracker.close();
