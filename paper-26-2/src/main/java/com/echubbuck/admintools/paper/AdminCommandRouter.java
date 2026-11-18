@@ -40,16 +40,17 @@ public final class AdminCommandRouter implements CommandExecutor, TabCompleter {
 
     private boolean invsee(CommandSender sender, String[] args) {
         if (!(sender instanceof Player admin)) return fail(sender, "This command requires a player.");
-        if (!plugin.permissions().canUse(sender, PermissionNodes.INVSEE)) return denied(sender);
+        boolean canEdit = plugin.permissions().canUse(sender, PermissionNodes.INVSEE_EDIT);
+        if (!plugin.permissions().canUse(sender, PermissionNodes.INVSEE) && !canEdit) return denied(sender);
         if (args.length < 1 || args.length > 2) return false;
         Player target = Bukkit.getPlayerExact(args[0]);
         if (target == null) return fail(sender, "That player is not online.");
         boolean edit = args.length == 2 && args[1].equalsIgnoreCase("edit");
         if (args.length == 2 && !edit) return false;
-        if (edit && !plugin.permissions().canUse(sender, PermissionNodes.INVSEE_EDIT)) return denied(sender);
+        if (edit && !canEdit) return denied(sender);
         if (!plugin.config().getBoolean("enable_inventory_viewer", true)) return fail(sender, "Inventory viewer is disabled.");
         plugin.inventoryViewer().openInventory(admin, target,
-                edit || plugin.config().getBoolean("invsee_edit_mode", false));
+                edit || (canEdit && plugin.config().getBoolean("invsee_edit_mode", false)));
         return true;
     }
 
