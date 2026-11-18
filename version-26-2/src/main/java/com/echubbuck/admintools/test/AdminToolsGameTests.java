@@ -250,6 +250,32 @@ public class AdminToolsGameTests {
     }
 
     @GameTest
+    public void invseeSingleSlotQuickcraftUsesSelectedSlot(GameTestHelper helper) {
+        ServerPlayer admin = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        ServerPlayer target = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        target.getInventory().setItem(0, new ItemStack(Items.GOLD_INGOT, 1));
+        InvSeeScreenHandler menu = new InvSeeScreenHandler(1, admin.getInventory(), target, true);
+        for (int i = 0; i < 36; i++) {
+            if (menu.slots.get(i).index != i) {
+                helper.fail("target slot has incorrect menu index: " + i);
+                return;
+            }
+        }
+        menu.setCarried(new ItemStack(Items.EMERALD, 4));
+        menu.clicked(-999, 0, ContainerInput.QUICK_CRAFT, admin);
+        menu.clicked(5, 1, ContainerInput.QUICK_CRAFT, admin);
+        menu.clicked(-999, 2, ContainerInput.QUICK_CRAFT, admin);
+        if (target.getInventory().getItem(0).is(Items.GOLD_INGOT)
+                && target.getInventory().getItem(0).getCount() == 1
+                && target.getInventory().getItem(5).is(Items.EMERALD)
+                && target.getInventory().getItem(5).getCount() == 4 && menu.getCarried().isEmpty()) {
+            helper.succeed();
+        } else {
+            helper.fail("single-slot quickcraft changed the wrong slot or lost items");
+        }
+    }
+
+    @GameTest
     public void readOnlyInvseeRejectsPickup(GameTestHelper helper) {
         ServerPlayer admin = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
         ServerPlayer target = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
