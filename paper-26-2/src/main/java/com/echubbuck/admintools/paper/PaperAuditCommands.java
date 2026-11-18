@@ -32,7 +32,8 @@ public final class PaperAuditCommands {
         return switch (command.toLowerCase(Locale.ROOT)) {
             case "itemtrace" -> itemTrace(sender, args);
             case "adminitem" -> adminItem(sender, args);
-            case "containertrace" -> plugin.containerAuditor().trace(sender, args);
+            case "containertrace" -> plugin.permissions().canUse(sender, PermissionNodes.CONTAINERTRACE)
+                    ? plugin.containerAuditor().trace(sender, args) : denied(sender);
             default -> false;
         };
     }
