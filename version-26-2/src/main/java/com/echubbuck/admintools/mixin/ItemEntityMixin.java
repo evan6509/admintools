@@ -3,6 +3,8 @@ package com.echubbuck.admintools.mixin;
 import com.echubbuck.admintools.AdminToolsMod;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.Inventory;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,13 +26,10 @@ public abstract class ItemEntityMixin {
         }
     }
 
-    @Inject(method = "playerTouch",
-            at = @At(value = "INVOKE",
-                    target = "Lnet/minecraft/world/entity/player/Player;onItemPickup(Lnet/minecraft/world/entity/item/ItemEntity;)V"))
-    private void admintools$onPickup(Player player, CallbackInfo ci) {
-        if (AdminToolsMod.getItemEventSink() == null) return;
-        ItemStack stack = ((ItemEntity) (Object) this).getItem();
-        if (stack == null || stack.isEmpty()) return;
-        AdminToolsMod.getItemEventSink().onPickup(player, stack);
+    @Redirect(method = "playerTouch", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/player/Inventory;add(Lnet/minecraft/world/item/ItemStack;)Z"))
+    private boolean admintools$insertAndRecordPickup(Inventory inventory, ItemStack stack, Player player) {
+        if (AdminToolsMod.getItemEventSink() == null) return inventory.add(stack);
+        return AdminToolsMod.getItemEventSink().addPickedUpStack(player, stack);
     }
 }

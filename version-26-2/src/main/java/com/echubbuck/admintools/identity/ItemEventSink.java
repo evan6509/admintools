@@ -63,6 +63,59 @@ public class ItemEventSink {
                 eventActor, name, "undelivered", "undelivered"));
     }
 
+    /** Wraps the actual insertion, before vanilla restores the count of fully picked-up entities. */
+    public boolean addPickedUpStack(Player player, ItemStack groundStack) {
+        var inventory = player.getInventory();
+        if (groundStack.isEmpty()) return inventory.add(groundStack);
+        String name = player.getScoreboardName();
+        UUID groundUid = identityManager.ensureIdentity(groundStack, "PICKUP", null, null);
+        ItemStack original = groundStack.copy();
+        ItemStack[] before = new ItemStack[inventory.getContainerSize()];
+        for (int slot = 0; slot < before.length; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty()) identityManager.ensureIdentity(stack, "OBSERVE", player.getUUID(), name);
+            before[slot] = stack.copy();
+        }
+        boolean inserted = inventory.add(groundStack);
+        boolean remainder = !groundStack.isEmpty();
+        boolean retainedGroundUid = false;
+        java.util.List<String> destinations = new java.util.ArrayList<>();
+        for (int slot = 0; slot < before.length; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack.isEmpty() || !ItemStack.isSameItemSameComponents(original, stack)) continue;
+            int previous = ItemStack.isSameItemSameComponents(before[slot], stack) ? before[slot].getCount() : 0;
+            int received = stack.getCount() - previous;
+            if (received <= 0) continue;
+            UUID uid = identityManager.ensureIdentity(stack, "PICKUP", player.getUUID(), name);
+            if (uid.equals(groundUid)) {
+                // A copied partial destination cannot share the live ground remainder's UID.
+                if (remainder || retainedGroundUid) uid = identityManager.identifySplit(groundUid, stack);
+                else retainedGroundUid = true;
+            } else {
+                identityManager.ledger().addParent(uid.toString(), groundUid.toString());
+            }
+            destinations.add(uid.toString());
+            if (movementTracker != null) movementTracker.noteSinkPickup(uid.toString());
+            identityManager.ledger().updateCount(uid.toString(), stack.getCount());
+            identityManager.ledger().setOwnerLocation(uid.toString(), name, ItemIdentityManager.ownerKey(name));
+            identityManager.ledger().recordEvent(ItemMovementEvent.of(
+                    uid.toString(), ItemAction.PICKUP, identityManager.itemId(stack), received,
+                    name, "ground", name, ItemIdentityManager.ownerKey(name)));
+        }
+        if (remainder) {
+            identityManager.ledger().updateCount(groundUid.toString(), groundStack.getCount());
+            identityManager.ledger().setOwnerLocation(groundUid.toString(), "ground", "ground");
+        } else if (!retainedGroundUid && !destinations.isEmpty()) {
+            identityManager.ledger().setStatus(groundUid.toString(), "MERGED");
+            identityManager.ledger().updateCount(groundUid.toString(), 0);
+            identityManager.ledger().setOwnerLocation(groundUid.toString(), name, String.join(",", destinations));
+            identityManager.ledger().recordEvent(ItemMovementEvent.of(
+                    groundUid.toString(), ItemAction.MERGE, identityManager.itemId(original), original.getCount(),
+                    name, groundUid.toString(), String.join(",", destinations), ItemIdentityManager.ownerKey(name)));
+        }
+        return inserted;
+    }
+
     public void onPickup(Player player, ItemStack stack) {
         if (stack.isEmpty()) return;
         String name = player.getScoreboardName();
