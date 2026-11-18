@@ -175,43 +175,43 @@ public class ItemLedger {
     /** Reads one newest-first page from the durable JSONL event history. */
     public EventPage eventPageByUid(String uid, int page, int pageSize) {
         int safePage = Math.max(1, page);
-        int safePageSize = Math.max(1, pageSize);
-        int retain = safePage * safePageSize;
-        Deque<ItemMovementEvent> matching = new ArrayDeque<>(retain);
-        int total = 0;
-        if (Files.exists(eventLog)) {
-            try (BufferedReader reader = Files.newBufferedReader(eventLog)) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.isBlank()) continue;
-                    try {
-                        ItemMovementEvent event = jsonlGson.fromJson(line, ItemMovementEvent.class);
-                        if (event == null || !uid.equals(event.uid())) continue;
-                        total++;
-                        matching.addLast(event);
-                        if (matching.size() > retain) matching.removeFirst();
-                    } catch (Exception ignored) {
-                        // Preserve readable history even if one line was truncated by a crash.
-                    }
-                }
-            } catch (IOException e) {
-                System.err.println("[AdminTools] Failed to read item history: " + e.getMessage());
-            }
-        } else {
-            for (ItemMovementEvent event : eventsByUid(uid)) {
-                total++;
-                matching.addLast(event);
-                if (matching.size() > retain) matching.removeFirst();
-            }
-        }
-
-        List<ItemMovementEvent> retained = new ArrayList<>(matching);
-        int end = retained.size() - (safePage - 1) * safePageSize;
+        int safePageSize = Math.clamp(pageSize, 1, 1000);
+        int[] count = {0};
+        forEachEventByUid(uid, event -> { if (count[0] < Integer.MAX_VALUE) count[0]++; });
+        int total = count[0];
+        long end = (long) total - (long) (safePage - 1) * safePageSize;
         if (end <= 0) return new EventPage(List.of(), total);
-        int start = Math.max(0, end - safePageSize);
-        List<ItemMovementEvent> newestFirst = new ArrayList<>(end - start);
-        for (int i = end - 1; i >= start; i--) newestFirst.add(retained.get(i));
-        return new EventPage(newestFirst, total);
+        long start = Math.max(0, end - safePageSize);
+        List<ItemMovementEvent> events = new ArrayList<>(safePageSize);
+        long[] index = {0};
+        // Count first, then retain only the requested page, regardless of its depth.
+        forEachEventByUid(uid, event -> {
+            long ordinal = index[0]++;
+            if (ordinal >= start && ordinal < end) events.add(event);
+        });
+        java.util.Collections.reverse(events);
+        return new EventPage(events, total);
+    }
+
+    private void forEachEventByUid(String uid, java.util.function.Consumer<ItemMovementEvent> consumer) {
+        if (!Files.exists(eventLog)) {
+            eventsByUid(uid).forEach(consumer);
+            return;
+        }
+        try (BufferedReader reader = Files.newBufferedReader(eventLog)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) continue;
+                try {
+                    ItemMovementEvent event = jsonlGson.fromJson(line, ItemMovementEvent.class);
+                    if (event != null && uid.equals(event.uid())) consumer.accept(event);
+                } catch (com.google.gson.JsonParseException | IllegalStateException ignored) {
+                    // Preserve readable history after malformed or truncated lines.
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("[AdminTools] Failed to read item history: " + e.getMessage());
+        }
     }
 
     public int duplicateAlertCount(String uid) {

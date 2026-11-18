@@ -130,6 +130,19 @@ public class ItemLogicTestRunner {
             eq(5, secondPage.events().size(), "persistent second page size");
             eq(5, secondPage.events().getFirst().count(), "persistent second page newest");
             eq(1, ledger.duplicateAlertCount(uid2), "persistent duplicate count");
+            for (int page : new int[]{10_000_000, Integer.MAX_VALUE}) {
+                eq(15, ledger.eventPageByUid(pagedUid, page, 10).total(), "huge page total");
+                isTrue(ledger.eventPageByUid(pagedUid, page, 10).events().isEmpty(), "huge page empty");
+                isTrue(ledger.eventPageByUid("absent", page, Integer.MAX_VALUE).events().isEmpty(),
+                        "huge arguments on missing UID");
+            }
+            eq(15, ledger.eventPageByUid(pagedUid, 1, Integer.MAX_VALUE).events().size(),
+                    "page size safely bounded");
+            eq(15, ledger.eventPageByUid(pagedUid, -1, 0).events().getFirst().count(),
+                    "invalid arguments normalized");
+            Files.writeString(tmp.resolve("item_ledger.jsonl"), "{truncated\nnull\n",
+                    java.nio.file.StandardOpenOption.APPEND);
+            eq(15, ledger.eventPageByUid(pagedUid, 1, 10).total(), "malformed lines skipped");
 
             // missing entry
             isNull(ledger.entry(UUID.randomUUID().toString()), "missing entry is null");
