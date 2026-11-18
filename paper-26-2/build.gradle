@@ -14,6 +14,10 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.121-stable")
     implementation("com.google.code.gson:gson:2.10.1")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.121-stable")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testImplementation("org.mockito:mockito-core:5.20.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
 }
 
 def fabricCommon = project(":version-26-2").file("src/main/java/com/echubbuck/admintools/common")
@@ -59,4 +63,8 @@ java {
 test {
     useJUnitPlatform()
     failOnNoDiscoveredTests = false
+    // Install the mock agent explicitly; tests also exercise final Paper services.
+    jvmArgs providers.provider {
+        ["-javaagent:" + configurations.testRuntimeClasspath.files.find { it.name.startsWith("mockito-core-") }]
+    }.get()
 }
