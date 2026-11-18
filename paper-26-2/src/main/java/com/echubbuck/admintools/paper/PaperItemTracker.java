@@ -39,6 +39,7 @@ public final class PaperItemTracker {
     private static final Path STATE_PATH = Path.of("config", "admintools", "paper_item_locations.json");
 
     private final ItemLedger ledger;
+    private final Path statePath;
     private final NamespacedKey uidKey;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private final Map<String, Observed> previous = new LinkedHashMap<>();
@@ -49,6 +50,11 @@ public final class PaperItemTracker {
     private boolean detectCreative;
 
     public PaperItemTracker(Plugin plugin, ItemLedger ledger) {
+        this(plugin, ledger, STATE_PATH);
+    }
+
+    PaperItemTracker(Plugin plugin, ItemLedger ledger, Path statePath) {
+        this.statePath = statePath;
         this.ledger = ledger;
         this.uidKey = new NamespacedKey(plugin, "uid");
         loadState();
@@ -60,7 +66,7 @@ public final class PaperItemTracker {
     }
 
     public void noteAdminAction(Player player, String itemId, ItemAction action, String actor) {
-        pendingActions.put(player.getUniqueId() + "|" + itemId, new PendingAction(action, actor, ticks));
+        pendingActions.put(player.getUniqueId() + "|" + itemId, new PendingAction(action, actor));
     }
 
     public void scanNow() {
@@ -92,8 +98,15 @@ public final class PaperItemTracker {
             ledger.setOwnerLocation(old.uid(), current.owner(), entry.getKey());
             if (old.count() != current.count()) {
                 ledger.updateCount(old.uid(), current.count());
-                ledger.recordEvent(ItemMovementEvent.of(old.uid(), ItemAction.UNKNOWN, current.itemId(),
-                        Math.abs(current.count() - old.count()), current.owner(), entry.getKey(), entry.getKey(), entry.getKey()));
+                int delta = current.count() - old.count();
+                PendingAction pending = pending(current.playerUuid(), current.itemId());
+                boolean adminChange = pending != null && (delta > 0 && pending.action() == ItemAction.ADMIN_GIVE
+                        || delta < 0 && pending.action() == ItemAction.ADMIN_REMOVE);
+                ItemAction action = adminChange ? pending.action() : ItemAction.UNKNOWN;
+                ledger.recordEvent(ItemMovementEvent.of(old.uid(), action, current.itemId(), Math.abs(delta),
+                        adminChange ? pending.actor() : current.owner(),
+                        adminChange && delta > 0 ? null : current.owner(),
+                        adminChange && delta < 0 ? "removed" : current.owner(), entry.getKey()));
             }
         }
 
@@ -117,6 +130,7 @@ public final class PaperItemTracker {
             next.put(entry.getKey(), current.observe(uid));
 
             PendingAction pending = pending(current.playerUuid(), current.itemId());
+            if (pending != null && pending.action() != ItemAction.ADMIN_GIVE) pending = null;
             ItemAction action = pending != null ? pending.action()
                     : moved != null ? ItemAction.TRANSFER : ItemAction.UNKNOWN;
             String actor = pending != null ? pending.actor() : current.owner();
@@ -130,11 +144,15 @@ public final class PaperItemTracker {
             if (consumedOldLocations.contains(entry.getKey())) continue;
             Observed old = entry.getValue();
             PendingAction pending = pending(old.playerUuid(), old.itemId());
+            if (pending != null && pending.action() != ItemAction.ADMIN_REMOVE) pending = null;
             ItemAction action = pending != null ? pending.action() : ItemAction.DROP;
             String actor = pending != null ? pending.actor() : old.owner();
             String destination = action == ItemAction.ADMIN_REMOVE ? "removed" : "ground-or-container";
             ledger.setOwnerLocation(old.uid(), destination, destination);
-            if (action == ItemAction.ADMIN_REMOVE) ledger.setStatus(old.uid(), "REMOVED");
+            if (action == ItemAction.ADMIN_REMOVE) {
+                ledger.setStatus(old.uid(), "REMOVED");
+                ledger.updateCount(old.uid(), 0);
+            }
             ledger.recordEvent(ItemMovementEvent.of(old.uid(), action, old.itemId(), old.count(),
                     actor, old.owner(), destination, entry.getKey()));
         }
@@ -142,7 +160,8 @@ public final class PaperItemTracker {
         previous.clear();
         previous.putAll(next);
         detectDuplicates(next);
-        pendingActions.entrySet().removeIf(entry -> ticks - entry.getValue().tick() > 3);
+        // Command attribution is consumed by this immediate post-operation scan only.
+        pendingActions.clear();
         if (ticks % 600 == 0) {
             saveState();
             ledger.saveIfDirty();
@@ -162,7 +181,7 @@ public final class PaperItemTracker {
                                   String kind, int slots) {
         for (int slot = 0; slot < Math.min(slots, inventory.getSize()); slot++) {
             ItemStack stack = inventory.getItem(slot);
-            if (stack == null || stack.getType().isAir()) continue;
+            if (stack == null || stack.isEmpty()) continue;
             String location = "paper:player:" + player.getUniqueId() + ":" + kind + ":" + slot;
             out.put(location, new RawStack(player.getUniqueId(), player.getName(), itemId(stack),
                     stack.getAmount(), fingerprint(stack), stack));
@@ -202,7 +221,7 @@ public final class PaperItemTracker {
 
     private PendingAction pending(UUID playerUuid, String itemId) {
         PendingAction action = pendingActions.get(playerUuid + "|" + itemId);
-        return action != null && ticks - action.tick() <= 3 ? action : null;
+        return action;
     }
 
     private void detectDuplicates(Map<String, Observed> observations) {
@@ -261,10 +280,10 @@ public final class PaperItemTracker {
     }
 
     private void loadState() {
-        if (!Files.exists(STATE_PATH)) return;
+        if (!Files.exists(statePath)) return;
         try {
             Type type = new TypeToken<Map<String, Observed>>() {}.getType();
-            Map<String, Observed> loaded = gson.fromJson(Files.readString(STATE_PATH), type);
+            Map<String, Observed> loaded = gson.fromJson(Files.readString(statePath), type);
             if (loaded != null) previous.putAll(loaded);
         } catch (Exception exception) {
             System.err.println("[AdminTools] Failed to load Paper item locations: " + exception.getMessage());
@@ -273,10 +292,10 @@ public final class PaperItemTracker {
 
     private void saveState() {
         try {
-            Files.createDirectories(STATE_PATH.getParent());
-            Path temporary = STATE_PATH.resolveSibling(STATE_PATH.getFileName() + ".tmp");
+            Files.createDirectories(statePath.getParent());
+            Path temporary = statePath.resolveSibling(statePath.getFileName() + ".tmp");
             Files.writeString(temporary, gson.toJson(previous));
-            Files.move(temporary, STATE_PATH, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporary, statePath, StandardCopyOption.REPLACE_EXISTING);
         } catch (Exception exception) {
             System.err.println("[AdminTools] Failed to save Paper item locations: " + exception.getMessage());
         }
@@ -292,5 +311,5 @@ public final class PaperItemTracker {
     private record Observed(String uid, UUID playerUuid, String owner, String itemId,
                             int count, String fingerprint) {}
 
-    private record PendingAction(ItemAction action, String actor, int tick) {}
+    private record PendingAction(ItemAction action, String actor) {}
 }

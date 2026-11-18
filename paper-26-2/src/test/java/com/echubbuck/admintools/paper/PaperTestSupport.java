@@ -24,6 +24,7 @@ final class PaperTestSupport {
         when(player.getUniqueId()).thenReturn(UUID.randomUUID());
         when(player.getName()).thenReturn(name);
         when(player.isOnline()).thenReturn(true);
+        when(player.getGameMode()).thenReturn(org.bukkit.GameMode.SURVIVAL);
         PlayerInventory storage = inventory(PlayerInventory.class, 41);
         Inventory ender = inventory(Inventory.class, 27);
         when(player.getInventory()).thenReturn(storage);
