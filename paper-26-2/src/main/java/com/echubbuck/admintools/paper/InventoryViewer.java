@@ -129,10 +129,9 @@ public final class InventoryViewer implements Listener {
         if (!session.editable() || !valid(target)) return;
         ItemStack oldCursor = cloneOrNull(event.getOldCursor());
         ItemStack newCursor = cloneOrNull(event.getCursor());
-        if (oldCursor == null || !Objects.equals(oldCursor, cloneOrNull(admin.getItemOnCursor()))
-                || (newCursor != null && !oldCursor.isSimilar(newCursor))) return;
+        if (oldCursor == null || (newCursor != null && !oldCursor.isSimilar(newCursor))) return;
         int placed = 0;
-        var writes = new ArrayList<Runnable>();
+        var writes = new ArrayList<SlotEdit>();
         for (var entry : event.getNewItems().entrySet()) {
             int raw = entry.getKey();
             int topSize = session.inventory().getSize();
@@ -152,13 +151,28 @@ public final class InventoryViewer implements Listener {
             int delta = after.getAmount() - (before == null ? 0 : before.getAmount());
             if (delta <= 0) return;
             placed += delta;
-            writes.add(() -> inventory.setItem(slot, after));
+            writes.add(new SlotEdit(inventory, slot, before, after));
         }
         if (placed != oldCursor.getAmount() - (newCursor == null ? 0 : newCursor.getAmount())) return;
-        writes.forEach(Runnable::run);
-        admin.setItemOnCursor(newCursor);
-        logger.log(admin.getName(), "INVSEE_EDIT", target.getName(), "live drag count=" + placed);
-        refreshViews();
+        int placedCount = placed;
+        // Paper installs the new cursor before firing this event, then restores the old
+        // cursor after DENY. Commit only after that restoration, against unchanged live state.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (sessions.get(admin.getUniqueId()) != session || !admin.isOnline()
+                    || !session.inventory().equals(admin.getOpenInventory().getTopInventory())
+                    || !valid(target) || Bukkit.getPlayer(session.target()) != target
+                    || !Objects.equals(oldCursor, cloneOrNull(admin.getItemOnCursor()))) return;
+            for (SlotEdit write : writes) {
+                if (!Objects.equals(write.before(), cloneOrNull(write.inventory().getItem(write.slot())))) {
+                    refreshViews();
+                    return;
+                }
+            }
+            for (SlotEdit write : writes) write.inventory().setItem(write.slot(), cloneOrNull(write.after()));
+            admin.setItemOnCursor(cloneOrNull(newCursor));
+            logger.log(admin.getName(), "INVSEE_EDIT", target.getName(), "live drag count=" + placedCount);
+            refreshViews();
+        });
     }
 
     @EventHandler
@@ -245,6 +259,8 @@ public final class InventoryViewer implements Listener {
     private static ItemStack cloneOrNull(ItemStack item) {
         return item == null || item.isEmpty() ? null : item.clone();
     }
+
+    private record SlotEdit(Inventory inventory, int slot, ItemStack before, ItemStack after) {}
 
     private record Session(UUID target, Inventory inventory, boolean editable, boolean enderChest) {}
 }

@@ -89,23 +89,68 @@ class ViewerTransactionTest {
         }
     }
 
-    @Test void validDragCommitsAndStaleDragIsRejectedAtomically() {
+    private void queueDrag(ViewerFixture f, Player admin, Map<Integer, ItemStack> changes) {
+        ItemStack old = PaperTestSupport.item(Material.DIAMOND, 4);
+        // Faithfully model Paper: new cursor during the event; old cursor restored after DENY.
+        var event = new InventoryDragEvent(admin.getOpenInventory(), null, old, false, changes);
+        admin.setItemOnCursor(null);
+        f.viewer.onDrag(event);
+        assertTrue(event.isCancelled());
+        assertNull(admin.getItemOnCursor());
+        admin.setItemOnCursor(old);
+    }
+    private void runQueued(ViewerFixture f) {
+        var tasks = java.util.List.copyOf(f.queued); f.queued.clear(); tasks.forEach(Runnable::run);
+    }
+
+    @Test void dragCommitsOnlyAfterPaperRestoresCursorAndConservesTopAndBottomItems() {
         try (var f = new ViewerFixture()) {
             var admin = f.player("Admin"); var target = f.player("Target");
             open(f, admin, target, true);
-            admin.setItemOnCursor(PaperTestSupport.item(Material.DIAMOND, 4));
-            var drag = new InventoryDragEvent(admin.getOpenInventory(), null, admin.getItemOnCursor(), false,
-                    Map.of(2, PaperTestSupport.item(Material.DIAMOND, 2), 3, PaperTestSupport.item(Material.DIAMOND, 2)));
-            target.getInventory().setItem(3, PaperTestSupport.item(Material.EMERALD, 1));
-            f.viewer.onDrag(drag);
-            assertTrue(drag.isCancelled());
+            queueDrag(f, admin, Map.of(2, PaperTestSupport.item(Material.DIAMOND, 2),
+                    36, PaperTestSupport.item(Material.DIAMOND, 2)));
             assertNull(target.getInventory().getItem(2));
             assertEquals(4, count(admin.getItemOnCursor()));
-            target.getInventory().setItem(3, null); f.tick();
-            f.viewer.onDrag(drag);
+            runQueued(f);
             assertEquals(2, count(target.getInventory().getItem(2)));
-            assertEquals(2, count(target.getInventory().getItem(3)));
+            assertEquals(2, count(admin.getInventory().getItem(9)));
             assertNull(admin.getItemOnCursor());
+        }
+    }
+
+    @Test void dragRejectsStaleSlotsAtomicallyBeforeAndAfterScheduling() {
+        try (var f = new ViewerFixture()) {
+            var admin = f.player("Admin"); var target = f.player("Target");
+            open(f, admin, target, true);
+            var changes = Map.of(2, PaperTestSupport.item(Material.DIAMOND, 2),
+                    3, PaperTestSupport.item(Material.DIAMOND, 2));
+            target.getInventory().setItem(3, PaperTestSupport.item(Material.EMERALD, 1));
+            queueDrag(f, admin, changes); runQueued(f);
+            assertNull(target.getInventory().getItem(2)); assertEquals(4, count(admin.getItemOnCursor()));
+            target.getInventory().setItem(3, null); f.tick();
+            queueDrag(f, admin, changes);
+            target.getInventory().setItem(3, PaperTestSupport.item(Material.EMERALD, 1)); runQueued(f);
+            assertNull(target.getInventory().getItem(2)); assertEquals(4, count(admin.getItemOnCursor()));
+            assertEquals(Material.EMERALD, target.getInventory().getItem(3).getType());
+        }
+    }
+
+    @Test void deferredDragAbortsAfterCursorChangeCloseReplacementOrTargetDeparture() {
+        for (String change : new String[]{"cursor", "close", "replace", "offline"}) {
+            try (var f = new ViewerFixture()) {
+                var admin = f.player("Admin"); var target = f.player("Target");
+                open(f, admin, target, true);
+                queueDrag(f, admin, Map.of(2, PaperTestSupport.item(Material.DIAMOND, 4)));
+                switch (change) {
+                    case "cursor" -> admin.setItemOnCursor(PaperTestSupport.item(Material.EMERALD, 1));
+                    case "close" -> admin.closeInventory();
+                    case "replace" -> f.viewer.openEnderChest(admin, target);
+                    case "offline" -> when(target.isOnline()).thenReturn(false);
+                }
+                runQueued(f);
+                assertNull(target.getInventory().getItem(2), change);
+                assertEquals(change.equals("cursor") ? 1 : 4, count(admin.getItemOnCursor()), change);
+            }
         }
     }
 
@@ -126,6 +171,7 @@ class ViewerTransactionTest {
                 click(f, admin, 0, ClickType.LEFT, action);
             assertEquals(3, count(target.getInventory().getItem(0)));
             assertNull(admin.getItemOnCursor());
+            clearInvocations(admin);
             when(target.isOnline()).thenReturn(false); f.tick();
             verify(admin).closeInventory();
         }
