@@ -39,6 +39,7 @@ public final class PaperItemTracker {
     private static final Path STATE_PATH = Path.of("config", "admintools", "paper_item_locations.json");
 
     private final ItemLedger ledger;
+    private final Path statePath;
     private final NamespacedKey uidKey;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private final Map<String, Observed> previous = new LinkedHashMap<>();
@@ -49,6 +50,11 @@ public final class PaperItemTracker {
     private boolean detectCreative;
 
     public PaperItemTracker(Plugin plugin, ItemLedger ledger) {
+        this(plugin, ledger, STATE_PATH);
+    }
+
+    PaperItemTracker(Plugin plugin, ItemLedger ledger, Path statePath) {
+        this.statePath = statePath;
         this.ledger = ledger;
         this.uidKey = new NamespacedKey(plugin, "uid");
         loadState();
@@ -75,6 +81,8 @@ public final class PaperItemTracker {
 
     private void scan() {
         ticks++;
+        Set<UUID> onlinePlayers = new HashSet<>();
+        Bukkit.getOnlinePlayers().forEach(player -> onlinePlayers.add(player.getUniqueId()));
         Map<String, RawStack> raw = collect();
         Map<String, Observed> next = new LinkedHashMap<>();
         Set<String> consumedOldLocations = new HashSet<>();
@@ -102,7 +110,7 @@ public final class PaperItemTracker {
             if (next.containsKey(entry.getKey())) continue;
             RawStack current = entry.getValue();
             String uid = embeddedUid(current.stack());
-            Map.Entry<String, Observed> moved = findDeparture(current, uid, consumedOldLocations);
+            Map.Entry<String, Observed> moved = findDeparture(current, uid, consumedOldLocations, onlinePlayers);
             if (moved != null) {
                 uid = moved.getValue().uid();
                 consumedOldLocations.add(moved.getKey());
@@ -129,6 +137,11 @@ public final class PaperItemTracker {
         for (var entry : previous.entrySet()) {
             if (consumedOldLocations.contains(entry.getKey())) continue;
             Observed old = entry.getValue();
+            if (!onlinePlayers.contains(old.playerUuid())) {
+                // Absence from the online scan is not an item movement.
+                next.put(entry.getKey(), old);
+                continue;
+            }
             PendingAction pending = pending(old.playerUuid(), old.itemId());
             ItemAction action = pending != null ? pending.action() : ItemAction.DROP;
             String actor = pending != null ? pending.actor() : old.owner();
@@ -162,7 +175,7 @@ public final class PaperItemTracker {
                                   String kind, int slots) {
         for (int slot = 0; slot < Math.min(slots, inventory.getSize()); slot++) {
             ItemStack stack = inventory.getItem(slot);
-            if (stack == null || stack.getType().isAir()) continue;
+            if (stack == null || stack.isEmpty()) continue;
             String location = "paper:player:" + player.getUniqueId() + ":" + kind + ":" + slot;
             out.put(location, new RawStack(player.getUniqueId(), player.getName(), itemId(stack),
                     stack.getAmount(), fingerprint(stack), stack));
@@ -170,10 +183,11 @@ public final class PaperItemTracker {
     }
 
     private Map.Entry<String, Observed> findDeparture(RawStack current, String embedded,
-                                                       Set<String> consumed) {
+                                                       Set<String> consumed, Set<UUID> onlinePlayers) {
         for (var entry : previous.entrySet()) {
             if (consumed.contains(entry.getKey())) continue;
             Observed old = entry.getValue();
+            if (!onlinePlayers.contains(old.playerUuid())) continue;
             if (embedded != null && embedded.equals(old.uid())) return entry;
             if (embedded == null && old.fingerprint().equals(current.fingerprint())
                     && old.count() == current.count()) return entry;
@@ -210,7 +224,8 @@ public final class PaperItemTracker {
         for (var entry : observations.entrySet()) {
             Observed observed = entry.getValue();
             Player player = Bukkit.getPlayer(observed.playerUuid());
-            if (!detectCreative && player != null && player.getGameMode().name().equals("CREATIVE")) continue;
+            if (player == null) continue;
+            if (!detectCreative && player.getGameMode().name().equals("CREATIVE")) continue;
             locations.computeIfAbsent(observed.uid(), ignored -> new ArrayList<>()).add(entry.getKey());
         }
         Set<String> active = new HashSet<>();
@@ -261,10 +276,10 @@ public final class PaperItemTracker {
     }
 
     private void loadState() {
-        if (!Files.exists(STATE_PATH)) return;
+        if (!Files.exists(statePath)) return;
         try {
             Type type = new TypeToken<Map<String, Observed>>() {}.getType();
-            Map<String, Observed> loaded = gson.fromJson(Files.readString(STATE_PATH), type);
+            Map<String, Observed> loaded = gson.fromJson(Files.readString(statePath), type);
             if (loaded != null) previous.putAll(loaded);
         } catch (Exception exception) {
             System.err.println("[AdminTools] Failed to load Paper item locations: " + exception.getMessage());
@@ -273,10 +288,10 @@ public final class PaperItemTracker {
 
     private void saveState() {
         try {
-            Files.createDirectories(STATE_PATH.getParent());
-            Path temporary = STATE_PATH.resolveSibling(STATE_PATH.getFileName() + ".tmp");
+            Files.createDirectories(statePath.getParent());
+            Path temporary = statePath.resolveSibling(statePath.getFileName() + ".tmp");
             Files.writeString(temporary, gson.toJson(previous));
-            Files.move(temporary, STATE_PATH, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporary, statePath, StandardCopyOption.REPLACE_EXISTING);
         } catch (Exception exception) {
             System.err.println("[AdminTools] Failed to save Paper item locations: " + exception.getMessage());
         }
