@@ -46,7 +46,7 @@ public class InvSeeScreenHandler extends ChestMenu {
         // slots for read-only-aware ones now that we have access to `this.slots`.
         for (int i = 0; i < TARGET_SLOTS; i++) {
             Slot original = this.slots.get(i);
-            this.slots.set(i, new Slot(original.container, i, original.x, original.y) {
+            Slot replacement = new Slot(original.container, i, original.x, original.y) {
                 @Override
                 public boolean mayPlace(ItemStack stack) {
                     return editable;
@@ -56,7 +56,9 @@ public class InvSeeScreenHandler extends ChestMenu {
                 public boolean mayPickup(Player player) {
                     return editable;
                 }
-            });
+            };
+            replacement.index = original.index;
+            this.slots.set(i, replacement);
         }
     }
 
