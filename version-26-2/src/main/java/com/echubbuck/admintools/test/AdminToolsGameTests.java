@@ -88,6 +88,99 @@ public class AdminToolsGameTests {
     }
 
     @GameTest
+    public void realFullPickupRecordsDeliveredQuantity(GameTestHelper helper) {
+        ServerPlayer player = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        var entity = pickupEntity(helper, new ItemStack(Items.DIAMOND, 10));
+        UUID groundUid = ItemUidComponent.get(entity.getItem());
+        entity.playerTouch(player);
+        if (entity.isRemoved() && pickupCount(groundUid) == 10
+                && player.getInventory().getItem(0).getCount() == 10
+                && player.getScoreboardName().equals(AdminToolsMod.getItemLedger().entry(groundUid.toString()).currentOwner)) {
+            helper.succeed();
+        } else helper.fail("real full pickup did not record the delivered quantity/owner");
+    }
+
+    @GameTest
+    public void realFullPickupMergeRetainsLineage(GameTestHelper helper) {
+        ServerPlayer player = fullInventory(helper);
+        player.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 63));
+        var entity = pickupEntity(helper, new ItemStack(Items.DIAMOND, 1));
+        UUID groundUid = ItemUidComponent.get(entity.getItem());
+        entity.playerTouch(player);
+        UUID destination = ItemUidComponent.get(player.getInventory().getItem(0));
+        if (entity.isRemoved() && pickupCount(destination) == 1
+                && "MERGED".equals(AdminToolsMod.getItemLedger().entry(groundUid.toString()).status)
+                && AdminToolsMod.getItemLedger().entry(destination.toString()).parents.contains(groundUid.toString())) {
+            helper.succeed();
+        } else helper.fail("full pickup merge did not preserve absorbed lineage");
+    }
+
+    @GameTest
+    public void realPartialPickupRetainsGroundOwnership(GameTestHelper helper) {
+        ServerPlayer player = fullInventory(helper);
+        player.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 63));
+        var entity = pickupEntity(helper, new ItemStack(Items.DIAMOND, 10));
+        UUID groundUid = ItemUidComponent.get(entity.getItem());
+        entity.playerTouch(player);
+        UUID destination = ItemUidComponent.get(player.getInventory().getItem(0));
+        var groundEntry = AdminToolsMod.getItemLedger().entry(groundUid.toString());
+        if (!entity.isRemoved() && entity.getItem().getCount() == 9 && groundEntry.count == 9
+                && "ground".equals(groundEntry.currentOwner) && "ACTIVE".equals(groundEntry.status)
+                && pickupCount(destination) == 1 && pickupCount(groundUid) == 0
+                && AdminToolsMod.getItemLedger().entry(destination.toString()).parents.contains(groundUid.toString())) {
+            helper.succeed();
+        } else helper.fail("partial pickup quantity/ground owner/merge lineage incorrect");
+    }
+
+    @GameTest
+    public void realPartialPickupIntoEmptySlotGetsChildIdentity(GameTestHelper helper) {
+        ServerPlayer player = fullInventory(helper);
+        player.getInventory().setItem(0, ItemStack.EMPTY);
+        ItemStack stack = new ItemStack(Items.DIAMOND, 10);
+        stack.set(DataComponents.MAX_STACK_SIZE, 1);
+        var entity = pickupEntity(helper, stack);
+        UUID groundUid = ItemUidComponent.get(entity.getItem());
+        entity.playerTouch(player);
+        UUID child = ItemUidComponent.get(player.getInventory().getItem(0));
+        if (child != null && !child.equals(groundUid) && entity.getItem().getCount() == 9
+                && player.getInventory().getItem(0).getCount() == 1 && pickupCount(child) == 1
+                && AdminToolsMod.getItemLedger().entry(child.toString()).parents.contains(groundUid.toString())
+                && "ground".equals(AdminToolsMod.getItemLedger().entry(groundUid.toString()).currentOwner)) {
+            helper.succeed();
+        } else helper.fail("partial insertion copied the ground UID or lost split lineage");
+    }
+
+    @GameTest
+    public void realFailedPickupRecordsNoMovement(GameTestHelper helper) {
+        ServerPlayer player = fullInventory(helper);
+        var entity = pickupEntity(helper, new ItemStack(Items.DIAMOND, 10));
+        UUID uid = ItemUidComponent.get(entity.getItem());
+        entity.playerTouch(player);
+        if (!entity.isRemoved() && entity.getItem().getCount() == 10 && pickupCount(uid) == 0) helper.succeed();
+        else helper.fail("failed pickup recorded movement or changed the ground stack");
+    }
+
+    private static ServerPlayer fullInventory(GameTestHelper helper) {
+        ServerPlayer player = (ServerPlayer) helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++)
+            player.getInventory().setItem(slot, new ItemStack(Items.STONE, 64));
+        return player;
+    }
+
+    private static net.minecraft.world.entity.item.ItemEntity pickupEntity(GameTestHelper helper, ItemStack stack) {
+        var pos = helper.absolutePos(new BlockPos(1, 1, 1));
+        var entity = new net.minecraft.world.entity.item.ItemEntity(helper.getLevel(), pos.getX(), pos.getY(), pos.getZ(), stack, 0, 0, 0);
+        entity.setNoPickUpDelay();
+        return entity;
+    }
+
+    private static int pickupCount(UUID uid) {
+        if (uid == null) return -1;
+        return AdminToolsMod.getItemLedger().eventsByUid(uid.toString()).stream()
+                .filter(event -> event.action() == ItemAction.PICKUP).mapToInt(ItemMovementEvent::count).sum();
+    }
+
+    @GameTest
     public void assignCreatesDistinctIdentities(GameTestHelper helper) {
         Player p = helper.makeMockServerPlayer(net.minecraft.world.level.GameType.SURVIVAL);
         ItemStack a = new ItemStack(Items.OAK_LOG, 40);
