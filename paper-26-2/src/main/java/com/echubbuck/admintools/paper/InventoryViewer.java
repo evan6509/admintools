@@ -48,8 +48,7 @@ public final class InventoryViewer implements Listener {
         for (int slot = 0; slot < Math.min(storage.length, view.getSize()); slot++) {
             view.setItem(slot, cloneOrNull(storage[slot]));
         }
-        sessions.put(admin.getUniqueId(), new Session(target.getUniqueId(), view, editable, false));
-        admin.openInventory(view);
+        open(admin, new Session(target.getUniqueId(), view, editable, false));
         logger.log(admin.getName(), editable ? "INVSEE_EDIT_OPEN" : "INVSEE_OPEN", target.getName(), "success");
     }
 
@@ -59,8 +58,7 @@ public final class InventoryViewer implements Listener {
         for (int slot = 0; slot < Math.min(contents.length, view.getSize()); slot++) {
             view.setItem(slot, cloneOrNull(contents[slot]));
         }
-        sessions.put(admin.getUniqueId(), new Session(target.getUniqueId(), view, false, true));
-        admin.openInventory(view);
+        open(admin, new Session(target.getUniqueId(), view, false, true));
         logger.log(admin.getName(), "ENDERSEE_OPEN", target.getName(), "success");
     }
 
@@ -165,7 +163,9 @@ public final class InventoryViewer implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        sessions.remove(event.getPlayer().getUniqueId());
+        Session session = sessions.get(event.getPlayer().getUniqueId());
+        if (session == null || !session.inventory().equals(event.getView().getTopInventory())) return;
+        sessions.remove(event.getPlayer().getUniqueId(), session);
     }
 
     @EventHandler
@@ -219,6 +219,27 @@ public final class InventoryViewer implements Listener {
         ItemStack copy = item.clone();
         copy.setAmount(amount);
         return copy;
+    }
+
+    private void open(Player admin, Session session) {
+        // Closing the prior view may synchronously fire InventoryCloseEvent.
+        admin.closeInventory();
+        sessions.put(admin.getUniqueId(), session);
+        admin.openInventory(session.inventory());
+        if (!session.inventory().equals(admin.getOpenInventory().getTopInventory())) {
+            sessions.remove(admin.getUniqueId(), session);
+        }
+    }
+
+    /** Close protected copies before the plugin's listeners are removed. */
+    public void close() {
+        for (UUID uuid : java.util.List.copyOf(sessions.keySet())) {
+            Player viewer = Bukkit.getPlayer(uuid);
+            Session session = sessions.get(uuid);
+            if (viewer != null && session != null
+                    && session.inventory().equals(viewer.getOpenInventory().getTopInventory())) viewer.closeInventory();
+        }
+        sessions.clear();
     }
 
     private static ItemStack cloneOrNull(ItemStack item) {
